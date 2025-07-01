@@ -1,0 +1,21 @@
+package com.mercedes.workflowrh.entity;
+
+public enum TypeDemande {
+
+
+    CONGE_ANNUEL,
+    CONGE_REPOS_COMPENSATEUR,
+    CONGE_SANS_SOLDE,
+
+    CONGE_MATERNITE,
+    CONGE_MARIAGE,
+    CONGE_NAISSANCE,
+    CONGE_DECES,
+    CONGE_PATERNITE,
+    CONGE_CIRCONCISION,
+    CONGE_PELERINAGE,
+
+    AUTORISATION,
+
+    ORDRE_MISSION
+}
