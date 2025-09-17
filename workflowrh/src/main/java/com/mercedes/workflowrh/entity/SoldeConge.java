@@ -1,10 +1,6 @@
 package com.mercedes.workflowrh.entity;
-
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 @Entity
 @Table(name = "soldes_conges")
@@ -23,7 +19,6 @@ public class SoldeConge {
     private Employe employe;
 
     private Integer annee;
-
     private Float soldeAu2012;
     private Float droitAnnuel;
     private Float droitN;

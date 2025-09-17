@@ -1,36 +1,41 @@
 package com.mercedes.workflowrh.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.UUID;
 
-@Entity
-@Table(name = "employes")
-@Data
+import java.time.LocalDate;
+import java.util.List;
+
 @NoArgsConstructor
 @AllArgsConstructor
+@Table(name = "employes")
 @Builder
+@Entity
+@Data
+@ToString(exclude = {"demandes", "soldesConges", "motDePasse"})
+@JsonIgnoreProperties({"demandes", "soldesConges", "motDePasse"})
 public class Employe {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    @Column(unique = true, nullable = false)
     private String matricule;
-
-    @Column(nullable = false)
-    private String motDePasse;
 
     private String nom;
     private String prenom;
-    private String direction;
-    private String service;
     private Integer grade;
+    private String service;
 
+    private String chefHierarchique1Matricule;
+    private String chefHierarchique2Matricule;
+
+    private String email;
+
+    @Column(nullable = false)
+    @JsonIgnore
+    private String motDePasse;
+
+    private String direction;
     private LocalDate dateEmbauche;
 
     @Enumerated(EnumType.STRING)
@@ -39,26 +44,13 @@ public class Employe {
     @Enumerated(EnumType.STRING)
     private Role role;
 
-    @ManyToOne
-    @JoinColumn(name = "chef_1_id")
-    private Employe chef1;
-
-    @ManyToOne
-    @JoinColumn(name = "chef_2_id")
-    private Employe chef2;
+    private Boolean premiereConnexion = true;
 
     @OneToMany(mappedBy = "employe")
+    @JsonIgnore
     private List<Demande> demandes;
 
     @OneToMany(mappedBy = "employe")
+    @JsonIgnore
     private List<SoldeConge> soldesConges;
-
-    @OneToMany(mappedBy = "destinataire")
-    private List<Notification> notifications;
-
-    @OneToMany(mappedBy = "acteur")
-    private List<HistoriqueDemande> historiqueDemandes;
-
-    @OneToMany(mappedBy = "validateur")
-    private List<Validation> validations;
 }
