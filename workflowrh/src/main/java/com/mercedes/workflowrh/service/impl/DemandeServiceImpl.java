@@ -10,7 +10,6 @@ import com.mercedes.workflowrh.repository.HistoriqueDemandeRepository;
 import com.mercedes.workflowrh.service.DemandeService;
 import com.mercedes.workflowrh.service.MailService;
 import com.mercedes.workflowrh.service.NotificationService;
-import com.mercedes.workflowrh.entity.StatutDemande;
 import com.mercedes.workflowrh.service.SoldeCongeService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -20,14 +19,27 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.util.UUID;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
+/**
+ * Service d'implémentation pour la gestion des demandes (congés, autorisations, missions).
+ *
+ * Mises à jour apportées :
+ * - Intégration du SoldeCongeService pour gérer les soldes de congés.
+ * - Dans validerDemande() : Après validation d'un congé (standard ou exceptionnel),
+ *   calcul du nombre de jours pris et débit du solde via soldeCongeService.debiterSoldeConge().
+ *   Puis recalcul du solde actuel via soldeCongeService.calculerEtMettreAJourSoldeActuel().
+ *   (Note : Pour les autorisations, une conversion minutes → jours (240 min = 0.5 jour)
+ *   pourrait être ajoutée ultérieurement si demandé.)
+ * - Ajout de l'import pour ChronoUnit (calcul des jours entre dates).
+ * - Autres méthodes inchangées (création, KPI, recherches, etc.).
+ */
 @Service
 @RequiredArgsConstructor
 public class DemandeServiceImpl implements DemandeService {
@@ -37,6 +49,7 @@ public class DemandeServiceImpl implements DemandeService {
     private final HistoriqueDemandeRepository historiqueDemandeRepository;
     private final NotificationService notificationService;
     private final MailService mailService;
+    private final SoldeCongeService soldeCongeService; //  Utilisé pour mettre à jour les soldes de congés
 
     @Override
     @Transactional
@@ -70,10 +83,22 @@ public class DemandeServiceImpl implements DemandeService {
     }
 
     @Override
-    public List<Demande> getAll() {
-        return  demandeRepository.findAll();
+    public Employe getEmployeByMatricule(String matricule) {
+        if (matricule == null || matricule.isBlank()) {
+            throw new IllegalArgumentException("Le matricule ne peut pas être vide");
+        }
+
+        return employeRepository.findByMatricule(matricule)
+                .orElseThrow(() -> new RuntimeException(
+                        "Aucun employé trouvé avec le matricule : " + matricule
+                ));
     }
 
+
+    @Override
+    public List<Demande> getAll() {
+        return demandeRepository.findAll();
+    }
 
     // -------------------- KPI Dashboard --------------------
 
@@ -122,9 +147,6 @@ public class DemandeServiceImpl implements DemandeService {
         return demandeRepository.countByStatutGrouped();
     }
 
-
-
-
     // -------------------- Chart / Time-series --------------------
     @Override
     public List<Object[]> countDemandesPerMonth(LocalDateTime start, LocalDateTime end) {
@@ -171,7 +193,17 @@ public class DemandeServiceImpl implements DemandeService {
         return demandeRepository.countByEmployeAndDateCreationBetween(e, start, end);
     }
 
-//-----------------------------------------------------------------------------------------------------
+    @Override
+    public void delete(Demande demande) {
+        demandeRepository.delete(demande);
+    }
+
+    @Override
+    public Demande getById(long demandeId) {
+        return  demandeRepository.findById(demandeId).get();
+    }
+
+    //-----------------------------------------------------------------------------------------------------
 
     @Override
     @Transactional
@@ -340,7 +372,6 @@ public class DemandeServiceImpl implements DemandeService {
                 .toList();
     }
 
-
     private DemandeListDTO toListItem(Demande d) {
         LocalDate dDebut = null, dFin = null;
 
@@ -354,9 +385,9 @@ public class DemandeServiceImpl implements DemandeService {
 
         return DemandeListDTO.builder()
                 .id(d.getId())
-                .employeMatricule(d.getEmploye()!=null ? d.getEmploye().getMatricule() : null)
-                .employeNom(d.getEmploye()!=null ? d.getEmploye().getNom() : null)
-                .employePrenom(d.getEmploye()!=null ? d.getEmploye().getPrenom() : null)
+                .employeMatricule(d.getEmploye() != null ? d.getEmploye().getMatricule() : null)
+                .employeNom(d.getEmploye() != null ? d.getEmploye().getNom() : null)
+                .employePrenom(d.getEmploye() != null ? d.getEmploye().getPrenom() : null)
                 .categorie(d.getCategorie())
                 .typeDemande(d.getTypeDemande())
                 .dateDebut(dDebut)
@@ -369,10 +400,10 @@ public class DemandeServiceImpl implements DemandeService {
     private DemandeDetailDTO toDetail(Demande d) {
         return DemandeDetailDTO.builder()
                 .id(d.getId())
-                .employeMatricule(d.getEmploye()!=null ? d.getEmploye().getMatricule() : null)
-                .employeNom(d.getEmploye()!=null ? d.getEmploye().getNom() : null)
-                .employePrenom(d.getEmploye()!=null ? d.getEmploye().getPrenom() : null)
-                .employeEmail(d.getEmploye()!=null ? d.getEmploye().getEmail() : null)
+                .employeMatricule(d.getEmploye() != null ? d.getEmploye().getMatricule() : null)
+                .employeNom(d.getEmploye() != null ? d.getEmploye().getNom() : null)
+                .employePrenom(d.getEmploye() != null ? d.getEmploye().getPrenom() : null)
+                .employeEmail(d.getEmploye() != null ? d.getEmploye().getEmail() : null)
                 .categorie(d.getCategorie())
                 .typeDemande(d.getTypeDemande())
                 .statut(d.getStatut())
@@ -396,6 +427,7 @@ public class DemandeServiceImpl implements DemandeService {
                 .missionObjet(d.getMissionObjet())
                 .build();
     }
+
     // -------------------- Helpers sécurité/validation --------------------
     @Override
     @Transactional
@@ -423,9 +455,24 @@ public class DemandeServiceImpl implements DemandeService {
         // ✅ Notif WebSocket + e-mail à l’employé créateur
         notificationService.notifyEmployeeOnValidation(saved);
 
+        // ✅ MISE À JOUR : Débit du solde de congé si c’est un congé validé (standard ou exceptionnel)
+        // Calcul des jours pris (inclusif : fin - début + 1)
+        if (d.getCategorie() == CategorieDemande.CONGE_STANDARD || d.getCategorie() == CategorieDemande.CONGE_EXCEPTIONNEL) {
+            Employe employe = d.getEmploye();
+            if (employe != null && d.getCongeDateDebut() != null && d.getCongeDateFin() != null) {
+                long joursPris = ChronoUnit.DAYS.between(d.getCongeDateDebut(), d.getCongeDateFin()) + 1;
+                soldeCongeService.debiterSoldeConge(employe, joursPris);
+                soldeCongeService.calculerEtMettreAJourSoldeActuel(employe); // Recalcul pour appliquer les règles (droit N, etc.)
+            }
+        }
+
+        // TODO : Pour les autorisations, ajouter un débit en jours fractionnés (ex: 240 min = 0.5 jour)
+        // si (d.getCategorie() == CategorieDemande.AUTORISATION && d.getAutoHeureSortieReelle() != null && d.getAutoHeureRetourReel() != null) {
+        //     // Calcul minutes réelles, conversion en jours, puis debiterSoldeConge(employe, joursFractionnes);
+        // }
+
         return saved;
     }
-
 
     @Override
     @Transactional
@@ -452,6 +499,8 @@ public class DemandeServiceImpl implements DemandeService {
 
         // ✅ Notif WebSocket + e-mail à l’employé créateur (avec motif)
         notificationService.notifyEmployeeOnRefuse(saved);
+
+        // Pas de mise à jour de solde en cas de refus (logique métier)
 
         return saved;
     }
@@ -521,12 +570,6 @@ public class DemandeServiceImpl implements DemandeService {
         historiqueDemandeRepository.save(h);
     }
 
-
-
-
-
-
-
     @Override
     public List<Demande> getHistoriqueDemandes(String matriculeEmploye) {
         Employe employe = employeRepository.findByMatricule(matriculeEmploye)
@@ -554,8 +597,8 @@ public class DemandeServiceImpl implements DemandeService {
                     return employe != null && (matriculeChef.equals(employe.getChefHierarchique1Matricule()) || matriculeChef.equals(employe.getChefHierarchique2Matricule()));
                 })
                 .collect(Collectors.toList());
-
     }
+
     @Override
     public List<Demande> getHistoriqueSubordonnes(String matriculeChef) {
         // On récupère toutes les demandes
@@ -572,6 +615,4 @@ public class DemandeServiceImpl implements DemandeService {
                 })
                 .collect(Collectors.toList());
     }
-
-
 }

@@ -24,7 +24,15 @@ public class SoldeCongeServiceImpl implements SoldeCongeService {
     @Override
     public SoldeConge calculerEtMettreAJourSoldeActuel(Employe employe) {
         SoldeConge soldeConge = soldeCongeRepository.findByEmploye(employe)
-                .orElse(new SoldeConge());
+                .orElseGet(() -> {
+                    SoldeConge nouveau = new SoldeConge();
+                    nouveau.setEmploye(employe);
+                    nouveau.setSoldeAu2012(0f);
+                    nouveau.setCongesAcquisN(0f);
+                    nouveau.setRetardsN(0f);
+                    nouveau.setAutorisationsN(0f);
+                    return nouveau;
+                });
         soldeConge.setEmploye(employe);
 // Calcul du droit annuel en fonction du grade et du matricule
         float droitAnnuel = SoldeCongeCalculator.calculerDroitAnnuel(
@@ -57,6 +65,58 @@ public class SoldeCongeServiceImpl implements SoldeCongeService {
         soldeConge.setSoldeActuel(soldeActuel);
 
         return soldeCongeRepository.save(soldeConge);
+    }
+
+    //********************************************* method for the   ojectif
+    @Override
+    public boolean estSoldeNegatif(Employe employe) {
+        SoldeConge soldeConge = soldeCongeRepository.findByEmploye(employe)
+                .orElseThrow(() -> new RuntimeException("Solde de congé non trouvé"));
+        return soldeConge.getSoldeActuel() < 0;
+    }
+
+    @Override
+    public void verrouillerSiSoldeNegatif(Employe employe) {
+        if (estSoldeNegatif(employe)) {
+            throw new RuntimeException("Le solde est négatif, nouvelles demandes bloquées. "
+                    + "Contactez le DRH pour déverrouillage.");
+        }
+    }
+
+    @Override
+    public float calculerDroitMensuel(Employe employe) {
+        float droitAnnuel = SoldeCongeCalculator.calculerDroitAnnuel(
+                employe.getGrade(),
+                employe.getTypeContrat().name(),
+                employe.getDateEmbauche()
+        );
+        return droitAnnuel / 12;
+    }
+
+    @Override
+    public void reinitialiserSoldeAnnuel(Employe employe, int nouvelleAnnee) {
+        SoldeConge ancienSolde = soldeCongeRepository.findByEmploye(employe)
+                .orElseThrow(() -> new RuntimeException("Aucun solde trouvé pour l'employé"));
+
+        // création d’un nouveau solde pour l’année suivante
+        SoldeConge nouveauSolde = SoldeConge.builder()
+                .employe(employe)
+                .annee(nouvelleAnnee)
+                .soldeAu2012(ancienSolde.getSoldeActuel()) // on reporte le solde N-1
+                .droitAnnuel(ancienSolde.getDroitAnnuel()) // recalculé si besoin
+                .droitN(0f)
+                .congesAcquisN(0f)
+                .retardsN(0f)
+                .autorisationsN(0f)
+                .soldeActuel(ancienSolde.getSoldeActuel())
+                .build();
+
+        soldeCongeRepository.save(nouveauSolde);
+    }
+
+    @Override
+    public SoldeConge creerSoldeConge(Employe employe) {
+        return null;
     }
 
     @Override

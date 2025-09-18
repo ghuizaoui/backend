@@ -6,6 +6,7 @@ import com.mercedes.workflowrh.entity.Role;
 import com.mercedes.workflowrh.repository.EmployeRepository;
 import com.mercedes.workflowrh.service.EmployeService;
 import com.mercedes.workflowrh.service.MailService;
+import com.mercedes.workflowrh.service.SoldeCongeService;
 import jakarta.mail.MessagingException;
 import lombok.*;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -33,6 +34,8 @@ public class EmployeServiceImpl implements EmployeService {
 
     private static final Pattern SUFFIX_PATTERN = Pattern.compile("(\\d+)$");
 
+    private final SoldeCongeService soldeCongeService;
+
     @Override
     @Transactional
     public Employe ajouterEmploye(EmployeDTO dto) {
@@ -56,6 +59,9 @@ public class EmployeServiceImpl implements EmployeService {
 
         employeRepository.save(emp);
 
+        // 👉 Initialiser son solde de congé dès la création
+        soldeCongeService.calculerEtMettreAJourSoldeActuel(emp);
+
         try {
             String html = mailService.buildBienvenueMail(emp.getPrenom(), emp.getNom(), matricule, rawPassword);
             mailService.sendHtmlMail(emp.getEmail(), "Bienvenue sur Workflow RH", html);
@@ -65,7 +71,6 @@ public class EmployeServiceImpl implements EmployeService {
 
         return emp;
     }
-
     @Override
     @Transactional
     public void changerMotDePassePremiereConnexion(String matricule, String nouveauMotDePasse) {

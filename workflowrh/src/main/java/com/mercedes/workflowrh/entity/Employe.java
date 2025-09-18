@@ -23,7 +23,7 @@ public class Employe {
 
     private String nom;
     private String prenom;
-    private Integer grade;
+    private Integer grade; //solde
     private String service;
 
     private String chefHierarchique1Matricule;

@@ -2,7 +2,9 @@ package com.mercedes.workflowrh.controller;
 
 import com.mercedes.workflowrh.dto.EmployeDTO;
 import com.mercedes.workflowrh.entity.Employe;
+import com.mercedes.workflowrh.entity.SoldeConge;
 import com.mercedes.workflowrh.service.EmployeService;
+import com.mercedes.workflowrh.service.SoldeCongeService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -17,11 +19,23 @@ import java.util.Optional;
 public class EmployeController {
 
     private final EmployeService employeService;
+    private  final SoldeCongeService soldeCongeService;
 
     @PostMapping("/add")
     public ResponseEntity<Employe> ajouterEmploye(@RequestBody EmployeDTO dto) {
         System.out.println("SECURITY DEBUG : " + SecurityContextHolder.getContext().getAuthentication());
+
+        // 1. Création de l’employé
         Employe employe = employeService.ajouterEmploye(dto);
+
+        // 2. Création automatique du solde de congé
+        try {
+            SoldeConge soldeConge = soldeCongeService.creerSoldeConge(employe);
+            System.out.println("Solde de congé créé : " + soldeConge.getSoldeActuel());
+        } catch (Exception e) {
+            System.err.println(" Erreur lors de la création du solde de congé : " + e.getMessage());
+        }
+
         return ResponseEntity.ok(employe);
     }
 

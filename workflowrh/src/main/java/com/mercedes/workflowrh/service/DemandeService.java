@@ -3,10 +3,7 @@ package com.mercedes.workflowrh.service;
 
 import com.mercedes.workflowrh.dto.DemandeDetailDTO;
 import com.mercedes.workflowrh.dto.DemandeListDTO;
-import com.mercedes.workflowrh.entity.CategorieDemande;
-import com.mercedes.workflowrh.entity.Demande;
-import com.mercedes.workflowrh.entity.TypeDemande;
-import com.mercedes.workflowrh.entity.StatutDemande;
+import com.mercedes.workflowrh.entity.*;
 
 
 import java.time.LocalDate;
@@ -21,6 +18,10 @@ public interface DemandeService {
             LocalDate dateDebut, LocalTime heureDebut,
             LocalDate dateFin,   LocalTime heureFin
     );
+
+
+
+    Employe getEmployeByMatricule(String matricule);
 
 
    List<Demande> getAll();
@@ -106,6 +107,10 @@ public interface DemandeService {
     List<Demande> findByDateCreationBetween(LocalDateTime start, LocalDateTime end);
 
     long countByEmployeAndDateRange(String matricule, LocalDateTime start, LocalDateTime end);
+
+ void  delete(Demande demande);
+
+ Demande getById(long demandeId );
 
 }
 
