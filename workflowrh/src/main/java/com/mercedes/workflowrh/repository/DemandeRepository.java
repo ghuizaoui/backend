@@ -119,4 +119,44 @@
 
         @Query("SELECT d.typeDemande, COUNT(d) FROM Demande d GROUP BY d.typeDemande")
         List<Object[]> countDemandesByType();
+
+
+        // update the repostiory to can  see the dashboard like
+        // Add these methods to your DemandeRepository
+
+        @Query("SELECT d.employe.service, COUNT(d) FROM Demande d " +
+                "WHERE d.statut = 'VALIDEE' " +
+                "AND d.dateCreation BETWEEN :start AND :end " +
+                "GROUP BY d.employe.service")
+        List<Object[]> countAcceptedDemandesByServiceAndDateRange(
+                @Param("start") LocalDateTime start,
+                @Param("end") LocalDateTime end);
+
+        List<Demande> findByStatutAndCategorieInAndDateCreationBetween(
+                StatutDemande statut,
+                List<CategorieDemande> categories,
+                LocalDateTime start,
+                LocalDateTime end);
+
+        List<Demande> findByEmployeAndStatutAndCategorieInAndDateCreationBetween(
+                Employe employe,
+                StatutDemande statut,
+                List<CategorieDemande> categories,
+                LocalDateTime start,
+                LocalDateTime end);
+
+
+        // In your DemandeRepository.java, add these methods:
+
+        // Get status distribution with date filtering
+        @Query("SELECT d.statut, COUNT(d) FROM Demande d " +
+                "WHERE d.dateCreation BETWEEN :start AND :end " +
+                "GROUP BY d.statut")
+        List<Object[]> countByStatutGroupedWithDateRange(@Param("start") LocalDateTime start,
+                                                         @Param("end") LocalDateTime end);
+
+        // Get total count for percentage calculation
+        @Query("SELECT COUNT(d) FROM Demande d WHERE d.dateCreation BETWEEN :start AND :end")
+        Long countTotalByDateRange(@Param("start") LocalDateTime start,
+                                   @Param("end") LocalDateTime end);
     }

@@ -3,6 +3,7 @@ package com.mercedes.workflowrh.service;
 
 import com.mercedes.workflowrh.dto.DemandeDetailDTO;
 import com.mercedes.workflowrh.dto.DemandeListDTO;
+import com.mercedes.workflowrh.dto.dashboardDto.*;
 import com.mercedes.workflowrh.entity.*;
 
 
@@ -111,6 +112,18 @@ public interface DemandeService {
  void  delete(Demande demande);
 
  Demande getById(long demandeId );
+
+
+
+ DashboardOverviewDTO getDashboardOverview(String startDate, String endDate);
+ List<StatusDistributionDTO> getStatusDistribution(String startDate, String endDate);
+ LeaveBalanceDTO getLeaveBalanceOverview(String startDate, String endDate);
+ List<ServiceLeaveDTO> getLeaveBalanceByService(String startDate, String endDate);
+ List<AcceptedRequestsDTO> getAcceptedRequestsByService(String startDate, String endDate);
+ List<EmployeeLeaveBalanceDTO> getLeaveBalanceDetails(String service, String startDate, String endDate);
+
+ // In your DemandeService interface, add:
+ List<StatusDistributionDTO> getStatusDistribution(LocalDateTime start, LocalDateTime end);
 
 }
 

@@ -3,6 +3,7 @@ package com.mercedes.workflowrh.service.impl;
 
 import com.mercedes.workflowrh.dto.DemandeDetailDTO;
 import com.mercedes.workflowrh.dto.DemandeListDTO;
+import com.mercedes.workflowrh.dto.dashboardDto.*;
 import com.mercedes.workflowrh.entity.*;
 import com.mercedes.workflowrh.repository.DemandeRepository;
 import com.mercedes.workflowrh.repository.EmployeRepository;
@@ -23,8 +24,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -614,5 +614,275 @@ public class DemandeServiceImpl implements DemandeService {
                     );
                 })
                 .collect(Collectors.toList());
+    }
+
+    //*************************************************************** to update the dashboard
+
+    // Add these methods to your DemandeServiceImpl class
+
+    @Override
+    public DashboardOverviewDTO getDashboardOverview(String startDate, String endDate) {
+        LocalDateTime start = parseDateTime(startDate);
+        LocalDateTime end = parseDateTime(endDate);
+
+        long totalDemandes = countByDateCreationBetween(start, end);
+
+        // For "total possible", we need to define what this means
+        // This could be based on number of employees * working days in period
+        // For simplicity, let's assume it's calculated differently
+        long totalPossible = calculateTotalPossibleDemands(start, end);
+
+        double percentage = totalPossible > 0 ? (double) totalDemandes / totalPossible * 100 : 0;
+
+        return DashboardOverviewDTO.builder()
+                .totalDemandes(totalDemandes)
+                .totalPossible(totalPossible)
+                .percentage(Math.round(percentage * 100.0) / 100.0)
+                .build();
+    }
+
+    @Override
+    public List<StatusDistributionDTO> getStatusDistribution(String startDate, String endDate) {
+        LocalDateTime start = parseDateTime(startDate);
+        LocalDateTime end = parseDateTime(endDate);
+
+        long total = countByDateCreationBetween(start, end);
+
+        List<StatusDistributionDTO> distribution = new ArrayList<>();
+
+        for (StatutDemande status : StatutDemande.values()) {
+            long count = countByStatutAndDateCreationBetween(status, start, end);
+            double percentage = total > 0 ? (double) count / total * 100 : 0;
+
+            distribution.add(StatusDistributionDTO.builder()
+                    .status(status.name())
+                    .count(count)
+                    .percentage(Math.round(percentage * 100.0) / 100.0)
+                    .build());
+        }
+
+        return distribution;
+    }
+
+    @Override
+    public LeaveBalanceDTO getLeaveBalanceOverview(String startDate, String endDate) {
+        // This requires calculating taken leaves and total balance
+        // Implementation depends on how you track taken leaves
+
+        List<Demande> congesValides = demandeRepository.findByStatutAndCategorieInAndDateCreationBetween(
+                StatutDemande.VALIDEE,
+                Arrays.asList(CategorieDemande.CONGE_STANDARD, CategorieDemande.CONGE_EXCEPTIONNEL),
+                parseDateTime(startDate), parseDateTime(endDate)
+        );
+
+        double joursPris = calculateTotalDaysTaken(congesValides);
+
+        // Get total balance from all employees
+        double soldeTotal = calculateTotalBalance();
+
+        double percentagePris = soldeTotal > 0 ? (joursPris / soldeTotal) * 100 : 0;
+        double soldeRestant = soldeTotal - joursPris;
+
+        return LeaveBalanceDTO.builder()
+                .joursPris(joursPris)
+                .soldeTotal(soldeTotal)
+                .percentagePris(Math.round(percentagePris * 100.0) / 100.0)
+                .soldeRestant(soldeRestant)
+                .build();
+    }
+
+    @Override
+    public List<ServiceLeaveDTO> getLeaveBalanceByService(String startDate, String endDate) {
+        List<ServiceLeaveDTO> result = new ArrayList<>();
+
+        // Get all services
+        List<String> services = employeRepository.findAll().stream()
+                .map(Employe::getService)
+                .distinct()
+                .collect(Collectors.toList());
+
+        LocalDateTime start = parseDateTime(startDate);
+        LocalDateTime end = parseDateTime(endDate);
+
+        double totalJoursPris = 0;
+        Map<String, Double> serviceDaysMap = new HashMap<>();
+
+        for (String service : services) {
+            List<Employe> employes = employeRepository.findByService(service);
+            double serviceJoursPris = 0;
+
+            for (Employe employe : employes) {
+                List<Demande> congesValides = demandeRepository.findByEmployeAndStatutAndCategorieInAndDateCreationBetween(
+                        employe, StatutDemande.VALIDEE,
+                        Arrays.asList(CategorieDemande.CONGE_STANDARD, CategorieDemande.CONGE_EXCEPTIONNEL),
+                        start, end
+                );
+
+                serviceJoursPris += calculateTotalDaysTaken(congesValides);
+            }
+
+            serviceDaysMap.put(service, serviceJoursPris);
+            totalJoursPris += serviceJoursPris;
+        }
+
+        for (String service : services) {
+            double joursPris = serviceDaysMap.getOrDefault(service, 0.0);
+            double percentage = totalJoursPris > 0 ? (joursPris / totalJoursPris) * 100 : 0;
+
+            result.add(ServiceLeaveDTO.builder()
+                    .service(service)
+                    .joursPris(joursPris)
+                    .percentage(Math.round(percentage * 100.0) / 100.0)
+                    .build());
+        }
+
+        return result;
+    }
+
+    @Override
+    public List<AcceptedRequestsDTO> getAcceptedRequestsByService(String startDate, String endDate) {
+        LocalDateTime start = parseDateTime(startDate);
+        LocalDateTime end = parseDateTime(endDate);
+
+        List<Object[]> results = demandeRepository.countAcceptedDemandesByServiceAndDateRange(start, end);
+
+        return results.stream()
+                .map(result -> AcceptedRequestsDTO.builder()
+                        .service((String) result[0])
+                        .demandesAcceptees((Long) result[1])
+                        .build())
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<EmployeeLeaveBalanceDTO> getLeaveBalanceDetails(String service, String startDate, String endDate) {
+        List<EmployeeLeaveBalanceDTO> result = new ArrayList<>();
+
+        List<Employe> employes = service != null ?
+                employeRepository.findByService(service) :
+                employeRepository.findAll();
+
+        // Find the highest balance in the group
+        float highestBalance = employes.stream()
+                .map(emp -> soldeCongeService.getSoldeActuel(emp.getMatricule())
+                        .orElse(SoldeConge.builder().soldeActuel(0f).build())
+                        .getSoldeActuel())
+                .max(Float::compare)
+                .orElse(0f);
+
+        for (Employe employe : employes) {
+            SoldeConge solde = soldeCongeService.getSoldeActuel(employe.getMatricule())
+                    .orElse(SoldeConge.builder().soldeActuel(0f).build());
+
+            result.add(EmployeeLeaveBalanceDTO.builder()
+                    .matricule(employe.getMatricule())
+                    .nom(employe.getNom())
+                    .prenom(employe.getPrenom())
+                    .service(employe.getService())
+                    .soldeConges(solde.getSoldeActuel())
+                    .hasHighestBalance(solde.getSoldeActuel() == highestBalance)
+                    .build());
+        }
+
+        return result;
+    }
+
+    // Helper methods
+    private LocalDateTime parseDateTime(String dateTimeStr) {
+        if (dateTimeStr == null || dateTimeStr.isEmpty()) {
+            return LocalDateTime.of(2000, 1, 1, 0, 0); // Default start date
+        }
+        return LocalDateTime.parse(dateTimeStr);
+    }
+
+    private long calculateTotalPossibleDemands(LocalDateTime start, LocalDateTime end) {
+        // This is a business logic decision
+        // For example: number of employees * working days in the period
+        long numberOfEmployees = employeRepository.count();
+        long workingDays = ChronoUnit.DAYS.between(start.toLocalDate(), end.toLocalDate()) + 1;
+
+        return numberOfEmployees * workingDays;
+    }
+
+    private double calculateTotalDaysTaken(List<Demande> conges) {
+        return conges.stream()
+                .mapToDouble(demande -> {
+                    if (demande.getCongeDateDebut() != null && demande.getCongeDateFin() != null) {
+                        return ChronoUnit.DAYS.between(
+                                demande.getCongeDateDebut(),
+                                demande.getCongeDateFin()
+                        ) + 1; // Inclusive
+                    }
+                    return 0;
+                })
+                .sum();
+    }
+
+    private double calculateTotalBalance() {
+        return employeRepository.findAll().stream()
+                .mapToDouble(emp -> soldeCongeService.getSoldeActuel(emp.getMatricule())
+                        .orElse(SoldeConge.builder().soldeActuel(0f).build())
+                        .getSoldeActuel())
+                .sum();
+    }
+
+
+
+    @Override
+    public List<StatusDistributionDTO> getStatusDistribution(LocalDateTime start, LocalDateTime end) {
+        // Get the status counts
+        List<Object[]> statusCounts = demandeRepository.countByStatutGroupedWithDateRange(start, end);
+
+        // Get total count for percentage calculation
+        Long totalCount = demandeRepository.countTotalByDateRange(start, end);
+
+        if (totalCount == null || totalCount == 0) {
+            // Return empty distribution if no data
+            return new ArrayList<>();
+        }
+
+        // Convert to DTOs with percentages
+        List<StatusDistributionDTO> distribution = new ArrayList<>();
+
+        for (Object[] result : statusCounts) {
+            StatutDemande status = (StatutDemande) result[0];
+            Long count = (Long) result[1];
+
+            double percentage = (double) count / totalCount * 100;
+
+            distribution.add(StatusDistributionDTO.builder()
+                    .status(status.name())
+                    .count(count)
+                    .percentage(Math.round(percentage * 100.0) / 100.0) // Round to 2 decimal places
+                    .build());
+        }
+
+        // Ensure all statuses are represented, even if count is 0
+        ensureAllStatusesRepresented(distribution, totalCount);
+
+        return distribution;
+    }
+
+    private void ensureAllStatusesRepresented(List<StatusDistributionDTO> distribution, Long totalCount) {
+        // Get all possible statuses
+        Set<StatutDemande> allStatuses = new HashSet<>(Arrays.asList(StatutDemande.values()));
+
+        // Remove statuses that are already in the distribution
+        for (StatusDistributionDTO dto : distribution) {
+            try {
+                allStatuses.remove(StatutDemande.valueOf(dto.getStatus()));
+            } catch (IllegalArgumentException e) {
+                // Ignore if status string doesn't match enum
+            }
+        }
+
+        // Add missing statuses with count 0
+        for (StatutDemande missingStatus : allStatuses) {
+            distribution.add(StatusDistributionDTO.builder()
+                    .status(missingStatus.name())
+                    .count(0L)
+                    .percentage(0.0)
+                    .build());
+        }
     }
 }

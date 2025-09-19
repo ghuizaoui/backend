@@ -18,4 +18,8 @@ public interface EmployeRepository extends JpaRepository<Employe, String> {
     Optional<String> findLastMatriculeWithPrefix(@Param("prefix") String prefix);
     List<Employe> findByRole(Role role);
     List<Employe> findAllByRole(Role role);
+    // Add these methods to your EmployeRepository
+
+    List<Employe> findByService(String service);
+    long count();
 }

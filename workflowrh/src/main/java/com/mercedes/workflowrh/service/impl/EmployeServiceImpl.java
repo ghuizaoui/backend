@@ -59,7 +59,7 @@ public class EmployeServiceImpl implements EmployeService {
 
         employeRepository.save(emp);
 
-        // 👉 Initialiser son solde de congé dès la création
+        // Initialiser son solde de congé dès la création
         soldeCongeService.calculerEtMettreAJourSoldeActuel(emp);
 
         try {
