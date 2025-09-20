@@ -12,7 +12,7 @@ public interface EmployeService {
     List<Employe> getAllEmployes();
     Optional<Employe> getEmployeByMatricule(String matricule);
     Employe updateEmploye(String matricule, EmployeDTO dto);
-
+    Employe updateEmploye(Employe employe);
     Optional<Employe> getEmployeProfile(String matricule);
 
 }

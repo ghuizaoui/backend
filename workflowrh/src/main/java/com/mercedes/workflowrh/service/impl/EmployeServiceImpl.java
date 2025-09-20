@@ -135,6 +135,12 @@ public class EmployeServiceImpl implements EmployeService {
         employe.setRole(dto.getRole());
         return employeRepository.save(employe);
     }
+
+    @Override
+    public Employe updateEmploye(Employe employe) {
+        return  employeRepository.save(employe);
+    }
+
     public Optional<Employe> getEmployeProfile(String matricule) {
         return employeRepository.findByMatricule(matricule);
     }

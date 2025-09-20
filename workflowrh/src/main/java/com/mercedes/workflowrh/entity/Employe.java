@@ -35,7 +35,7 @@ public class Employe {
     @JsonIgnore
     private String motDePasse;
 
-    private String direction;
+    private String direction;  // dashboard
     private LocalDate dateEmbauche;
 
     @Enumerated(EnumType.STRING)
@@ -45,6 +45,11 @@ public class Employe {
     private Role role;
 
     private Boolean premiereConnexion = true;
+
+    @Column(name="drh_super", columnDefinition = "TINYINT(1)")
+    private Boolean drhSuper = false;
+    private Boolean estBanni = false; // vrai si l'employé ne peut pas se connecter
+
 
     @OneToMany(mappedBy = "employe")
     @JsonIgnore

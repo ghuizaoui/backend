@@ -36,32 +36,44 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> authenticate(@RequestBody LoginRequest request) {
 
-        /* 1. on vérifie que le matricule existe */
-        Employe emp = employeRepository.findByMatricule(request.getMatricule())
-                .orElseThrow(() -> new UsernameNotFoundException("Matricule inconnu"));
+        try {
 
-        /* 2. Première connexion ? → 423 Locked + corps JSON */
-        if (Boolean.TRUE.equals(emp.getPremiereConnexion())) {
-            return ResponseEntity.status(HttpStatus.LOCKED)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(Map.of(
-                            "firstLogin", true,
-                            "matricule",   emp.getMatricule()
-                    ));
+
+
+            /* 1. on vérifie que le matricule existe */
+            Employe emp = employeRepository.findByMatricule(request.getMatricule())
+                    .orElseThrow(() -> new UsernameNotFoundException("Matricule inconnu"));
+
+            if(emp.getEstBanni()!=null && emp.getEstBanni()){
+                return  ResponseEntity.status(404).body("employe est banni");
+            }
+
+            /* 2. Première connexion ? → 423 Locked + corps JSON */
+            if (Boolean.TRUE.equals(emp.getPremiereConnexion())) {
+                return ResponseEntity.status(HttpStatus.LOCKED)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(Map.of(
+                                "firstLogin", true,
+                                "matricule", emp.getMatricule()
+                        ));
+            }
+
+            /* 3. Authentification Spring Security */
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            request.getMatricule(), request.getMotDePasse()));
+
+            /* 4. Génération des tokens */
+            UserDetails ud = userDetailsService.loadUserByUsername(request.getMatricule());
+            String access = jwtUtil.generateAccessToken(ud);
+            String refresh = jwtUtil.generateRefreshToken(ud);
+
+            return ResponseEntity.ok(
+                    new LoginResponse(access, refresh, emp.getRole().name()));
         }
-
-        /* 3. Authentification Spring Security */
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(
-                        request.getMatricule(), request.getMotDePasse()));
-
-        /* 4. Génération des tokens */
-        UserDetails ud   = userDetailsService.loadUserByUsername(request.getMatricule());
-        String access    = jwtUtil.generateAccessToken(ud);
-        String refresh   = jwtUtil.generateRefreshToken(ud);
-
-        return ResponseEntity.ok(
-                new LoginResponse(access, refresh, emp.getRole().name()));
+        catch (BadCredentialsException e) {
+            return ResponseEntity.status(500).body(Map.of());
+        }
     }
 
     @PostMapping("/refresh")

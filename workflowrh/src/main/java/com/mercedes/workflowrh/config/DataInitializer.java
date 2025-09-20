@@ -28,6 +28,7 @@ public class DataInitializer implements CommandLineRunner {
                     .email("drh@entreprise.com")
                     .motDePasse(passwordEncoder.encode("drh@2024")) // Mot de passe à changer à la 1ère connexion
                     .role(Role.DRH)
+                    .drhSuper(true)
                     .premiereConnexion(false)
                     .build();
             employeRepository.save(superDrh);
