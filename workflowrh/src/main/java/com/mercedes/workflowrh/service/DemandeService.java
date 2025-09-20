@@ -125,6 +125,11 @@ public interface DemandeService {
  // In your DemandeService interface, add:
  List<StatusDistributionDTO> getStatusDistribution(LocalDateTime start, LocalDateTime end);
 
+
+
+ EmployeDashboardDTO getEmployeDashboard(String matricule, String role);
+ List<AutorisationAujourdhui> getAutorisationsForToday();
+
 }
 
 

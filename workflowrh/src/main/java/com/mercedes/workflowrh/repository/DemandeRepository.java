@@ -6,6 +6,7 @@
     import org.springframework.data.repository.query.Param;
     import org.springframework.stereotype.Repository;
 
+    import java.time.LocalDate;
     import java.time.LocalDateTime;
     import java.util.List;
 
@@ -159,4 +160,10 @@
         @Query("SELECT COUNT(d) FROM Demande d WHERE d.dateCreation BETWEEN :start AND :end")
         Long countTotalByDateRange(@Param("start") LocalDateTime start,
                                    @Param("end") LocalDateTime end);
+
+
+        //******************************* dashboard employe
+        // In DemandeRepository
+        List<Demande> findByCategorieAndAutoDate(CategorieDemande categorie, LocalDate date);
+        List<Demande> findByEmployeAndDateCreationBetween(Employe employe, LocalDateTime start, LocalDateTime end);
     }

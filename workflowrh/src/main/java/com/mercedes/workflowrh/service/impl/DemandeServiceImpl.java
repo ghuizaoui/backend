@@ -885,4 +885,134 @@ public class DemandeServiceImpl implements DemandeService {
                     .build());
         }
     }
+
+
+
+    // dashboard employe and concearge *********************/////////////////////////////////////////////////////////
+
+    @Override
+    public EmployeDashboardDTO getEmployeDashboard(String matricule, String role) {
+        Employe employe = getEmployeByMatricule(matricule);
+
+        // Calculate date range for this month
+        LocalDateTime startOfMonth = LocalDateTime.now().withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0);
+        LocalDateTime endOfMonth = LocalDateTime.now().withDayOfMonth(LocalDateTime.now().getMonth().length(LocalDate.now().isLeapYear()))
+                .withHour(23).withMinute(59).withSecond(59);
+
+        // Get KPIs
+        long totalDemandes = countByEmployeAndDateRange(matricule, startOfMonth, endOfMonth);
+        long demandesEnCours = findByEmployeAndStatut(matricule, StatutDemande.EN_COURS).size();
+        long demandesValidees = findByEmployeAndStatut(matricule, StatutDemande.VALIDEE).size();
+        long demandesRefusees = findByEmployeAndStatut(matricule, StatutDemande.REFUSEE).size();
+
+        KPIData kpiData = KPIData.builder()
+                .totalDemandes(totalDemandes)
+                .demandesEnCours(demandesEnCours)
+                .demandesValidees(demandesValidees)
+                .demandesRefusees(demandesRefusees)
+                .build();
+
+        // Get recent demands (last 5)
+        List<Demande> recentDemandes = demandeRepository.findByEmployeMatricule(matricule)
+                .stream()
+                .sorted(Comparator.comparing(Demande::getDateCreation).reversed())
+                .limit(5)
+                .collect(Collectors.toList());
+
+        List<DemandeRecente> demandesRecentes = recentDemandes.stream()
+                .map(this::convertToDemandeRecente)
+                .collect(Collectors.toList());
+
+        // Get status distribution
+        Map<String, Long> statutDistribution = getStatusDistributionForEmployee(matricule, startOfMonth, endOfMonth);
+
+        // Get category distribution
+        Map<String, Long> categorieDistribution = getCategoryDistributionForEmployee(matricule, startOfMonth, endOfMonth);
+
+        // Build the dashboard DTO
+        EmployeDashboardDTO dashboard = EmployeDashboardDTO.builder()
+                .kpiData(kpiData)
+                .demandesRecentes(demandesRecentes)
+                .statutDistribution(statutDistribution)
+                .categorieDistribution(categorieDistribution)
+                .build();
+
+        // Add today's authorizations only for concierge role
+        if ("CONCIERGE".equals(role)) {
+            List<AutorisationAujourdhui> autorisations = getAutorisationsForToday();
+            dashboard.setAutorisationsAujourdhui(autorisations);
+            dashboard.getKpiData().setAutorisationsAujourdhui((long) autorisations.size());
+        }
+
+        return dashboard;
+    }
+
+    @Override
+    public List<AutorisationAujourdhui> getAutorisationsForToday() {
+        LocalDate today = LocalDate.now();
+
+        List<Demande> autorisationsAujourdhui = demandeRepository.findByCategorieAndAutoDate(
+                CategorieDemande.AUTORISATION, today);
+
+        return autorisationsAujourdhui.stream()
+                .map(d -> {
+                    AutorisationAujourdhui auth = new AutorisationAujourdhui();
+                    auth.setDemandeId(d.getId());
+                    auth.setEmployeNom(d.getEmploye().getNom());
+                    auth.setEmployePrenom(d.getEmploye().getPrenom());
+                    auth.setEmployeMatricule(d.getEmploye().getMatricule());
+                    auth.setHeureDebut(d.getAutoHeureDebut() != null ? d.getAutoHeureDebut().toString() : "");
+                    auth.setHeureFin(d.getAutoHeureFin() != null ? d.getAutoHeureFin().toString() : "");
+                    auth.setService(d.getEmploye().getService());
+                    return auth;
+                })
+                .collect(Collectors.toList());
+    }
+
+    private Map<String, Long> getStatusDistributionForEmployee(String matricule, LocalDateTime start, LocalDateTime end) {
+        List<Demande> employeeDemands = demandeRepository.findByEmployeAndDateCreationBetween(
+                employeRepository.findByMatricule(matricule).orElseThrow(),
+                start, end);
+
+        return employeeDemands.stream()
+                .collect(Collectors.groupingBy(
+                        d -> d.getStatut().name(),
+                        Collectors.counting()
+                ));
+    }
+
+    private Map<String, Long> getCategoryDistributionForEmployee(String matricule, LocalDateTime start, LocalDateTime end) {
+        List<Demande> employeeDemands = demandeRepository.findByEmployeAndDateCreationBetween(
+                employeRepository.findByMatricule(matricule).orElseThrow(),
+                start, end);
+
+        return employeeDemands.stream()
+                .collect(Collectors.groupingBy(
+                        d -> d.getCategorie().name(),
+                        Collectors.counting()
+                ));
+    }
+
+    private DemandeRecente convertToDemandeRecente(Demande demande) {
+        DemandeRecente recente = new DemandeRecente();
+        recente.setId(demande.getId());
+        recente.setCategorie(demande.getCategorie().name());
+        recente.setTypeDemande(demande.getTypeDemande() != null ? demande.getTypeDemande().name() : "");
+        recente.setStatut(demande.getStatut().name());
+        recente.setDateCreation(demande.getDateCreation().toString());
+
+        // Set appropriate dates based on category
+        if (demande.isCongeStandard() || demande.isCongeExceptionnel()) {
+            recente.setDateDebut(demande.getCongeDateDebut().toString());
+            recente.setDateFin(demande.getCongeDateFin().toString());
+        } else if (demande.isAutorisation()) {
+            recente.setDateDebut(demande.getAutoDate().toString());
+            recente.setDateFin(demande.getAutoDate().toString()); // Same day for authorization
+        } else if (demande.isOrdreMission()) {
+            recente.setDateDebut(demande.getMissionDateDebut().toString());
+            recente.setDateFin(demande.getMissionDateFin().toString());
+        }
+
+        return recente;
+    }
 }
