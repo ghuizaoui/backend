@@ -27,4 +27,9 @@ public interface SoldeCongeRepository extends JpaRepository<SoldeConge, Long> {
 
     // Récupérer tous les soldes d’une année donnée
     List<SoldeConge> findAllByAnnee(Integer annee);
+
+
+
+    // Dans SoldeCongeRepository.java
+    Optional<SoldeConge> findTopByEmployeMatriculeOrderByAnneeDesc(String matricule);
 }

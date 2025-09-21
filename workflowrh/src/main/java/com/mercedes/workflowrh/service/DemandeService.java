@@ -130,6 +130,12 @@ public interface DemandeService {
  EmployeDashboardDTO getEmployeDashboard(String matricule, String role);
  List<AutorisationAujourdhui> getAutorisationsForToday();
 
+
+
+ public List<Demande> getDemandesValideesEtRefuseesDuService(
+         String matriculeChef);
+
+
 }
 
 

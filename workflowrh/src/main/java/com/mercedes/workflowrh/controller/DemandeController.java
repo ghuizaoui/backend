@@ -371,7 +371,33 @@ public class DemandeController {
         }
     }
 
-// **************
+
+    @GetMapping("get-all-v-r")
+    public ResponseEntity<?> GetAllVR() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Utilisateur non authentifié.");
+        }
+
+        String matricule = auth.getName();
+
+        try {
+            Employe employe = employeService.getEmployeByMatricule(matricule)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Employé introuvable"));
+
+            List<Demande> demandes = demandeService.getDemandesValideesEtRefuseesDuService(
+                    employe.getService()
+            );
+
+            return ResponseEntity.ok(demandes);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Erreur lors de la récupération des demandes validées/refusées : " + e.getMessage());
+        }
+    }
+
+
+    // **************
 // Dashboard  *******************************************
     @GetMapping("/count/statut")
     public ResponseEntity<?> countByStatut() {
@@ -590,6 +616,8 @@ public class DemandeController {
             dto.setRetardsN(soldeConge.getRetardsN());
             dto.setAutorisationsN(soldeConge.getAutorisationsN());
             dto.setSoldeActuel(soldeConge.getSoldeActuel());
+            dto.setChefHierarchique1Matricule(emp.getChefHierarchique1Matricule());
+            dto.setChefHierarchique2Matricule(emp.getChefHierarchique2Matricule());
 
             return ResponseEntity.ok(dto);
         } catch (Exception e) {

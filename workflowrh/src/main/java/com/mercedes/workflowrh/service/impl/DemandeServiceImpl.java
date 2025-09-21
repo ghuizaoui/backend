@@ -968,6 +968,19 @@ public class DemandeServiceImpl implements DemandeService {
                 })
                 .collect(Collectors.toList());
     }
+    @Override
+    public List<Demande> getDemandesValideesEtRefuseesDuService(String matriculeChef) {
+        List<StatutDemande> statuts = Arrays.asList(
+                StatutDemande.REFUSEE,
+                StatutDemande.VALIDEE
+        );
+
+        return demandeRepository.findDemandesByServiceAndStatutsAndDateRange(
+                matriculeChef,
+                statuts
+        );
+    }
+
 
     private Map<String, Long> getStatusDistributionForEmployee(String matricule, LocalDateTime start, LocalDateTime end) {
         List<Demande> employeeDemands = demandeRepository.findByEmployeAndDateCreationBetween(

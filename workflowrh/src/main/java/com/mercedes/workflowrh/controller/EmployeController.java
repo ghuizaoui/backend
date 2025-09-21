@@ -150,4 +150,22 @@ public class EmployeController {
 
     }
 
+
+
+       @GetMapping("/me")
+        public  ResponseEntity<?> me() {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth == null || !auth.isAuthenticated()) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Utilisateur non authentifié.");
+            }
+            String matricule = auth.getName();
+            try{
+
+                return  ResponseEntity.ok(employeService.getEmployeByMatricule(matricule).get());
+            } catch (Exception e) {
+
+                return  ResponseEntity.status(500).body(false);
+            }
+
+        }
 }

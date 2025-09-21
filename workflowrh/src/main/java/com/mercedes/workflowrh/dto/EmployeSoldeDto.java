@@ -22,4 +22,8 @@ public class EmployeSoldeDto {
     private Float soldeActuel;
 
 
+    private String chefHierarchique1Matricule;
+    private String chefHierarchique2Matricule;
+
+
 }

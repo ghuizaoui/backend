@@ -166,4 +166,38 @@
         // In DemandeRepository
         List<Demande> findByCategorieAndAutoDate(CategorieDemande categorie, LocalDate date);
         List<Demande> findByEmployeAndDateCreationBetween(Employe employe, LocalDateTime start, LocalDateTime end);
+
+
+
+        // #############################################"" dashboard  chef
+        // Dans DemandeRepository.java
+        long countByEmployeMatriculeInAndDateCreationBetween(List<String> matricules, LocalDateTime start, LocalDateTime end);
+        long countByEmployeMatriculeInAndCategorieInAndDateCreationBetween(List<String> matricules, List<CategorieDemande> categories, LocalDateTime start, LocalDateTime end);
+        long countByEmployeMatriculeInAndCategorieAndDateCreationBetween(List<String> matricules, CategorieDemande categorie, LocalDateTime start, LocalDateTime end);
+        long countByEmployeMatriculeInAndStatutAndDateCreationBetween(List<String> matricules, StatutDemande statut, LocalDateTime start, LocalDateTime end);
+        List<Demande> findByEmployeMatriculeInAndStatutAndCategorieInAndDateCreationBetween(List<String> matricules, StatutDemande statut, List<CategorieDemande> categories, LocalDateTime start, LocalDateTime end);
+        List<Demande> findByEmployeMatriculeInAndDateCreationBetween(List<String> matricules, LocalDateTime start, LocalDateTime end);
+
+        @Query("SELECT e.service, e.direction, COUNT(d) FROM Demande d " +
+                "JOIN d.employe e " +
+                "WHERE e.direction = :direction " +
+                "AND d.statut = 'VALIDEE' " +
+                "AND d.dateCreation BETWEEN :start AND :end " +
+                "GROUP BY e.service, e.direction")
+        List<Object[]> countAcceptedDemandesByServiceAndDirectionAndDateRange(
+                @Param("direction") String direction,
+                @Param("start") LocalDateTime start,
+                @Param("end") LocalDateTime end);
+
+
+        @Query("SELECT d FROM Demande d " +
+                "JOIN d.employe e " +
+                "WHERE e.service = :service " +
+                "AND d.statut IN :statuts "
+                )
+        List<Demande> findDemandesByServiceAndStatutsAndDateRange(
+                @Param("service") String service,
+                @Param("statuts") List<StatutDemande> statuts);
+
+
     }
