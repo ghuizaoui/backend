@@ -1,7 +1,7 @@
-// src/main/java/com/mercedes/workflowrh/entity/Demande.java
 package com.mercedes.workflowrh.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -9,22 +9,13 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
-
 @Entity
-@Table(
-        name = "demandes",
-        indexes = {
-                @Index(name = "idx_demande_employe_statut", columnList = "employe_id, statut"),
-                @Index(name = "idx_demande_categorie",     columnList = "categorie"),
-                @Index(name = "idx_demande_type",          columnList = "typeDemande"),
-                @Index(name = "idx_demande_validateur",    columnList = "validateur_id")
-        }
-)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 @ToString(exclude = {"historiques", "notifications"})
+@Table(name = "demandes")
 public class Demande {
 
     @Id
@@ -51,6 +42,7 @@ public class Demande {
     private CategorieDemande categorie;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "type_demande", length = 50)
     private TypeDemande typeDemande;
 
     @ManyToOne
@@ -106,9 +98,17 @@ public class Demande {
     @Version
     private Long version;
 
+
+
+    @Lob
+    @Column(name = "file", columnDefinition = "LONGBLOB")
+    private byte[] file;
+
+
     @PrePersist
     void prePersist() {
         if (dateCreation == null) dateCreation = LocalDateTime.now();
+        if (dateDemande == null) dateDemande = LocalDateTime.now();
         if (statut == null) statut = StatutDemande.EN_COURS;
         syncCategorieEtType();
     }

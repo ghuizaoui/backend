@@ -1,119 +1,108 @@
-// src/main/java/com/mercedes/workflowrh/service/DemandeService.java
+// DemandeService.java (changed param to service)
 package com.mercedes.workflowrh.service;
 
 import com.mercedes.workflowrh.dto.DemandeDetailDTO;
 import com.mercedes.workflowrh.dto.DemandeListDTO;
 import com.mercedes.workflowrh.dto.dashboardDto.*;
 import com.mercedes.workflowrh.entity.*;
-
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List; // AJOUTER L'IMPORT
 
-
 public interface DemandeService {
-    Demande createCongeStandard(
-            TypeDemande typeDemande,
-            LocalDate dateDebut, LocalTime heureDebut,
-            LocalDate dateFin,   LocalTime heureFin
-    );
+ Demande createCongeStandard(
+         TypeDemande typeDemande,
+         LocalDate dateDebut, LocalTime heureDebut,
+         LocalDate dateFin,   LocalTime heureFin
+ );
 
+ Employe getEmployeByMatricule(String matricule);
 
+ List<Demande> getAll();
 
-    Employe getEmployeByMatricule(String matricule);
+ Demande createCongeExceptionnel(
+         TypeDemande typeDemande,
+         LocalDate dateDebut, LocalTime heureDebut,
+         LocalDate dateFin,   LocalTime heureFin, MultipartFile file
+ );
 
+ Demande createAutorisation(
+         TypeDemande typeDemande,
 
-   List<Demande> getAll();
+         // PRÉVU (requis)
+         LocalDate dateAutorisation,
+         LocalTime heureDebut,
+         LocalTime heureFin,
 
-    Demande createCongeExceptionnel(
-            TypeDemande typeDemande,
-            LocalDate dateDebut, LocalTime heureDebut,
-            LocalDate dateFin,   LocalTime heureFin
-    );
+         // RÉEL (optionnel)
+         LocalDate dateReelle,
+         LocalTime heureSortieReelle,
+         LocalTime heureRetourReel
+ );
 
-    Demande createAutorisation(
-            TypeDemande typeDemande,
+ Demande createOrdreMission(
+         LocalDate dateDebut, LocalTime heureDebut,
+         LocalDate dateFin,   LocalTime heureFin,
+         String missionObjet
+ );
+ DemandeDetailDTO findDetail(Long id);
 
-            // PRÉVU (requis)
-            LocalDate dateAutorisation,
-            LocalTime heureDebut,
-            LocalTime heureFin,
+ List<DemandeListDTO> findAllForChef(String matriculeChef);
 
-            // RÉEL (optionnel)
-            LocalDate dateReelle,
-            LocalTime heureSortieReelle,
-            LocalTime heureRetourReel
-    );
+ List<DemandeListDTO> findAllForDrh();
 
-    Demande createOrdreMission(
-            LocalDate dateDebut, LocalTime heureDebut,
-            LocalDate dateFin,   LocalTime heureFin,
-            String missionObjet
-    );
-    DemandeDetailDTO findDetail(Long id);
+ Demande validerDemande(Long demandeId, String matriculeValidateur);
+ Demande refuserDemande(Long demandeId, String matriculeValidateur, String commentaire);
 
-    List<DemandeListDTO> findAllForChef(String matriculeChef);
+ List<Demande> getHistoriqueDemandes(String matricule);
 
-    List<DemandeListDTO> findAllForDrh();
+ List<Demande> getDemandesEnAttente(String matriculeChef);
+ List<Demande> getHistoriqueSubordonnes(String matriculeChef);
 
-    Demande validerDemande(Long demandeId, String matriculeValidateur);
-    Demande refuserDemande(Long demandeId, String matriculeValidateur, String commentaire);
+ //************************************************** dashboard
+ // -------------------- KPI Dashboard --------------------
+ long countByStatut(StatutDemande statut);
 
-    List<Demande> getHistoriqueDemandes(String matricule);
+ long countByCategorie(CategorieDemande categorie);
 
-    List<Demande> getDemandesEnAttente(String matriculeChef);
-    List<Demande> getHistoriqueSubordonnes(String matriculeChef);
+ long countByDateCreationBetween(LocalDateTime start, LocalDateTime end);
 
+ long countByStatutAndDateCreationBetween(StatutDemande statut, LocalDateTime start, LocalDateTime end);
 
+ List<Object[]> countDemandesByEmploye();
 
-    //************************************************** dashboard
-    // -------------------- KPI Dashboard --------------------
-    long countByStatut(StatutDemande statut);
+ List<Object[]> countDemandesByService();
 
-    long countByCategorie(CategorieDemande categorie);
+ List<Object[]> countDemandesByCategorie();
 
-    long countByDateCreationBetween(LocalDateTime start, LocalDateTime end);
+ Double averageValidationTimeSeconds();
 
-    long countByStatutAndDateCreationBetween(StatutDemande statut, LocalDateTime start, LocalDateTime end);
+ List<Object[]> countByStatutGrouped();
 
-    List<Object[]> countDemandesByEmploye();
+ // -------------------- Chart / Time-series --------------------
+ List<Object[]> countDemandesPerMonth(LocalDateTime start, LocalDateTime end);
 
-    List<Object[]> countDemandesByService();
+ List<Object[]> countDemandesPerMonthAndYear();
 
-    List<Object[]> countDemandesByCategorie();
+ List<Object[]> countDemandesByCategoriePerMonth(LocalDateTime start, LocalDateTime end);
 
-    Double averageValidationTimeSeconds();
+ List<Object[]> countDemandesByType();
 
-    List<Object[]> countByStatutGrouped();
+ // -------------------- Search / Filter --------------------
+ List<Demande> findByEmployeAndStatut(String matricule, StatutDemande statut);
 
+ List<Demande> findByTypeDemande(TypeDemande typeDemande);
 
+ List<Demande> findByDateCreationBetween(LocalDateTime start, LocalDateTime end);
 
+ long countByEmployeAndDateRange(String matricule, LocalDateTime start, LocalDateTime end);
 
-    // -------------------- Chart / Time-series --------------------
-    List<Object[]> countDemandesPerMonth(LocalDateTime start, LocalDateTime end);
+ void delete(Demande demande);
 
-    List<Object[]> countDemandesPerMonthAndYear();
-
-    List<Object[]> countDemandesByCategoriePerMonth(LocalDateTime start, LocalDateTime end);
-
-    List<Object[]> countDemandesByType();
-
-    // -------------------- Search / Filter --------------------
-    List<Demande> findByEmployeAndStatut(String matricule, StatutDemande statut);
-
-    List<Demande> findByTypeDemande(TypeDemande typeDemande);
-
-    List<Demande> findByDateCreationBetween(LocalDateTime start, LocalDateTime end);
-
-    long countByEmployeAndDateRange(String matricule, LocalDateTime start, LocalDateTime end);
-
- void  delete(Demande demande);
-
- Demande getById(long demandeId );
-
-
+ Demande getById(long demandeId);
 
  DashboardOverviewDTO getDashboardOverview(String startDate, String endDate);
  List<StatusDistributionDTO> getStatusDistribution(String startDate, String endDate);
@@ -125,18 +114,9 @@ public interface DemandeService {
  // In your DemandeService interface, add:
  List<StatusDistributionDTO> getStatusDistribution(LocalDateTime start, LocalDateTime end);
 
-
-
  EmployeDashboardDTO getEmployeDashboard(String matricule, String role);
  List<AutorisationAujourdhui> getAutorisationsForToday();
 
-
-
  public List<Demande> getDemandesValideesEtRefuseesDuService(
-         String matriculeChef);
-
-
+         String service);
 }
-
-
-

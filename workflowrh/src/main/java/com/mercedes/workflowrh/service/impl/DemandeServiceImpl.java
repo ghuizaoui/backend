@@ -1,4 +1,3 @@
-// src/main/java/com/mercedes/workflowrh/service/impl/DemandeServiceImpl.java
 package com.mercedes.workflowrh.service.impl;
 
 import com.mercedes.workflowrh.dto.DemandeDetailDTO;
@@ -12,12 +11,15 @@ import com.mercedes.workflowrh.service.DemandeService;
 import com.mercedes.workflowrh.service.MailService;
 import com.mercedes.workflowrh.service.NotificationService;
 import com.mercedes.workflowrh.service.SoldeCongeService;
+import com.mercedes.workflowrh.service.impl.FileUploadService;
+import com.mercedes.workflowrh.service.impl.HolidayService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
@@ -27,19 +29,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
-/**
- * Service d'implémentation pour la gestion des demandes (congés, autorisations, missions).
- *
- * Mises à jour apportées :
- * - Intégration du SoldeCongeService pour gérer les soldes de congés.
- * - Dans validerDemande() : Après validation d'un congé (standard ou exceptionnel),
- *   calcul du nombre de jours pris et débit du solde via soldeCongeService.debiterSoldeConge().
- *   Puis recalcul du solde actuel via soldeCongeService.calculerEtMettreAJourSoldeActuel().
- *   (Note : Pour les autorisations, une conversion minutes → jours (240 min = 0.5 jour)
- *   pourrait être ajoutée ultérieurement si demandé.)
- * - Ajout de l'import pour ChronoUnit (calcul des jours entre dates).
- * - Autres méthodes inchangées (création, KPI, recherches, etc.).
- */
 @Service
 @RequiredArgsConstructor
 public class DemandeServiceImpl implements DemandeService {
@@ -49,18 +38,27 @@ public class DemandeServiceImpl implements DemandeService {
     private final HistoriqueDemandeRepository historiqueDemandeRepository;
     private final NotificationService notificationService;
     private final MailService mailService;
-    private final SoldeCongeService soldeCongeService; //  Utilisé pour mettre à jour les soldes de congés
+    private final SoldeCongeService soldeCongeService;
+    private final FileUploadService fileUploadService;
+    private final HolidayService holidayService;
 
     @Override
     @Transactional
     public Demande createCongeStandard(
             TypeDemande typeDemande,
             LocalDate dateDebut, LocalTime heureDebut,
-            LocalDate dateFin,   LocalTime heureFin) {
+            LocalDate dateFin, LocalTime heureFin) {
 
         assertType(typeDemande, CategorieDemande.CONGE_STANDARD);
         Employe employe = currentEmployeOr404();
         validateDates(dateDebut, dateFin);
+
+        // Check solde if deducts (though for standard, always true)
+        long joursOuvres = holidayService.calculateWorkingDays(dateDebut, dateFin);
+        float soldeActuel = soldeCongeService.getSoldeActuel(employe.getMatricule()).orElseThrow().getSoldeActuel();
+        if (soldeActuel < joursOuvres) {
+            throw bad("Solde insuffisant pour ce congé.");
+        }
 
         Demande d = Demande.builder()
                 .employe(employe)
@@ -75,13 +73,11 @@ public class DemandeServiceImpl implements DemandeService {
                 .dateCreation(LocalDateTime.now())
                 .build();
 
-        Demande saved = demandeRepository.save(d);
-        historiserCreation(saved);
-        notificationService.notifyManagerOfNewDemand(saved);
+        Demande saved = demandeRepository.save(d); // Save only the Demande
+        notificationService.notifyManagerOfNewDemand(saved); // Notify manager
 
         return saved;
     }
-
     @Override
     public Employe getEmployeByMatricule(String matricule) {
         if (matricule == null || matricule.isBlank()) {
@@ -93,7 +89,6 @@ public class DemandeServiceImpl implements DemandeService {
                         "Aucun employé trouvé avec le matricule : " + matricule
                 ));
     }
-
 
     @Override
     public List<Demande> getAll() {
@@ -200,7 +195,7 @@ public class DemandeServiceImpl implements DemandeService {
 
     @Override
     public Demande getById(long demandeId) {
-        return  demandeRepository.findById(demandeId).get();
+        return demandeRepository.findById(demandeId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Demande non trouvée"));
     }
 
     //-----------------------------------------------------------------------------------------------------
@@ -210,11 +205,24 @@ public class DemandeServiceImpl implements DemandeService {
     public Demande createCongeExceptionnel(
             TypeDemande typeDemande,
             LocalDate dateDebut, LocalTime heureDebut,
-            LocalDate dateFin,   LocalTime heureFin) {
+            LocalDate dateFin, LocalTime heureFin,
+            MultipartFile file) { // Added file parameter
 
         assertType(typeDemande, CategorieDemande.CONGE_EXCEPTIONNEL);
         Employe employe = currentEmployeOr404();
         validateDates(dateDebut, dateFin);
+
+        // Check solde if deducts
+        if (typeDemande.deductsFromSolde()) {
+            long joursOuvres = holidayService.calculateWorkingDays(dateDebut, dateFin);
+            float soldeActuel = soldeCongeService.getSoldeActuel(employe.getMatricule()).orElseThrow().getSoldeActuel();
+            if (soldeActuel < joursOuvres) {
+                throw bad("Solde insuffisant pour ce congé.");
+            }
+        }
+
+        // Process the uploaded file
+        byte[] fileData = fileUploadService.processFile(file);
 
         Demande d = Demande.builder()
                 .employe(employe)
@@ -225,27 +233,24 @@ public class DemandeServiceImpl implements DemandeService {
                 .congeHeureDebut(heureDebut)
                 .congeDateFin(dateFin)
                 .congeHeureFin(heureFin)
+                .file(fileData) // Store the file data
                 .workflowId(UUID.randomUUID().toString())
                 .dateCreation(LocalDateTime.now())
                 .build();
 
-        Demande saved = demandeRepository.save(d);
-        historiserCreation(saved);
-        notificationService.notifyManagerOfNewDemand(saved);
+        Demande saved = demandeRepository.save(d); // Save only the Demande
+        notificationService.notifyManagerOfNewDemand(saved); // Notify manager
 
         return saved;
     }
-
     @Override
     @Transactional
     public Demande createAutorisation(
             TypeDemande typeDemande,
-
             // PRÉVU
             LocalDate dateAutorisation,
             LocalTime heureDebut,
             LocalTime heureFin,
-
             // RÉEL (optionnel)
             LocalDate dateReelle,
             LocalTime heureSortieReelle,
@@ -273,6 +278,7 @@ public class DemandeServiceImpl implements DemandeService {
             if (!dateAutorisation.equals(dateReelle)) {
                 throw bad("L'autorisation est journalière : la date réelle doit être égale au jour prévu.");
             }
+            // Log the input values for debugging
             if (heureSortieReelle.isAfter(heureRetourReel)) {
                 throw bad("Plage réelle invalide (sortie > retour).");
             }
@@ -283,12 +289,10 @@ public class DemandeServiceImpl implements DemandeService {
                 .statut(StatutDemande.EN_COURS)
                 .categorie(typeDemande.getCategorie()) // AUTORISATION
                 .typeDemande(typeDemande)
-
                 // PRÉVU
                 .autoDate(dateAutorisation)
                 .autoHeureDebut(heureDebut)
                 .autoHeureFin(heureFin)
-
                 // RÉEL (optionnel)
                 .autoDateReelle(dateReelle)                   // peut être null
                 .autoHeureSortieReelle(heureSortieReelle)     // peut être null
@@ -297,18 +301,16 @@ public class DemandeServiceImpl implements DemandeService {
                 .dateCreation(LocalDateTime.now())
                 .build();
 
-        Demande saved = demandeRepository.save(d);
-        historiserCreation(saved);
-        notificationService.notifyManagerOfNewDemand(saved);
+        Demande saved = demandeRepository.save(d); // Save only the Demande
+        notificationService.notifyManagerOfNewDemand(saved); // Notify manager
 
         return saved;
     }
-
     @Override
     @Transactional
     public Demande createOrdreMission(
             LocalDate dateDebut, LocalTime heureDebut,
-            LocalDate dateFin,   LocalTime heureFin,
+            LocalDate dateFin, LocalTime heureFin,
             String missionObjet) {
 
         Employe employe = currentEmployeOr404();
@@ -334,13 +336,11 @@ public class DemandeServiceImpl implements DemandeService {
                 .dateCreation(LocalDateTime.now())
                 .build();
 
-        Demande saved = demandeRepository.save(d);
-        historiserCreation(saved);
-        notificationService.notifyManagerOfNewDemand(saved);
+        Demande saved = demandeRepository.save(d); // Save only the Demande
+        notificationService.notifyManagerOfNewDemand(saved); // Notify manager
 
         return saved;
     }
-
     @Override
     public DemandeDetailDTO findDetail(Long id) {
         Demande d = demandeRepository.findById(id)
@@ -376,10 +376,17 @@ public class DemandeServiceImpl implements DemandeService {
         LocalDate dDebut = null, dFin = null;
 
         switch (d.getCategorie()) {
-            case AUTORISATION -> { dDebut = d.getAutoDate(); dFin = d.getAutoDate(); }
-            case ORDRE_MISSION -> { dDebut = d.getMissionDateDebut(); dFin = d.getMissionDateFin(); }
+            case AUTORISATION -> {
+                dDebut = d.getAutoDate();
+                dFin = d.getAutoDate();
+            }
+            case ORDRE_MISSION -> {
+                dDebut = d.getMissionDateDebut();
+                dFin = d.getMissionDateFin();
+            }
             case CONGE_STANDARD, CONGE_EXCEPTIONNEL -> {
-                dDebut = d.getCongeDateDebut(); dFin = d.getCongeDateFin();
+                dDebut = d.getCongeDateDebut();
+                dFin = d.getCongeDateFin();
             }
         }
 
@@ -451,29 +458,40 @@ public class DemandeServiceImpl implements DemandeService {
         historiqueDemandeRepository.save(h);
 
         Demande saved = demandeRepository.save(d);
-
-        // ✅ Notif WebSocket + e-mail à l’employé créateur
         notificationService.notifyEmployeeOnValidation(saved);
 
-        // ✅ MISE À JOUR : Débit du solde de congé si c’est un congé validé (standard ou exceptionnel)
-        // Calcul des jours pris (inclusif : fin - début + 1)
-        if (d.getCategorie() == CategorieDemande.CONGE_STANDARD || d.getCategorie() == CategorieDemande.CONGE_EXCEPTIONNEL) {
-            Employe employe = d.getEmploye();
-            if (employe != null && d.getCongeDateDebut() != null && d.getCongeDateFin() != null) {
-                long joursPris = ChronoUnit.DAYS.between(d.getCongeDateDebut(), d.getCongeDateFin()) + 1;
-                soldeCongeService.debiterSoldeConge(employe, joursPris);
-                soldeCongeService.calculerEtMettreAJourSoldeActuel(employe); // Recalcul pour appliquer les règles (droit N, etc.)
+        // Deduct solde if applicable
+        Employe employe = saved.getEmploye();
+        if (employe != null) {
+            double joursPris = 0;
+            try {
+                if (saved.isCongeStandard() || saved.isCongeExceptionnel()) {
+                    if (saved.getTypeDemande() != null && saved.getTypeDemande().deductsFromSolde()) {
+                        if (saved.getCongeDateDebut() != null && saved.getCongeDateFin() != null) {
+                            joursPris = holidayService.calculateWorkingDays(saved.getCongeDateDebut(), saved.getCongeDateFin());
+                        }
+                    }
+                } else if (saved.isAutorisation()) {
+                    LocalTime debut = saved.getAutoHeureSortieReelle() != null ? saved.getAutoHeureSortieReelle() : saved.getAutoHeureDebut();
+                    LocalTime fin = saved.getAutoHeureRetourReel() != null ? saved.getAutoHeureRetourReel() : saved.getAutoHeureFin();
+                    if (debut != null && fin != null && saved.getAutoDate() != null && !holidayService.isFreeDay(saved.getAutoDate())) {
+                        long minutes = ChronoUnit.MINUTES.between(debut, fin);
+                        joursPris = (minutes / 240.0) * 0.5;
+                    }
+                }
+
+                if (joursPris > 0) {
+                    soldeCongeService.debiterSoldeConge(employe, joursPris, saved.getCategorie());
+                }
+            } catch (RuntimeException e) {
+                System.err.println("Erreur lors du débit du solde pour la demande ID " + demandeId + ": " + e.getMessage());
+                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                        "Erreur lors de la mise à jour du solde de congé: " + e.getMessage());
             }
         }
 
-        // TODO : Pour les autorisations, ajouter un débit en jours fractionnés (ex: 240 min = 0.5 jour)
-        // si (d.getCategorie() == CategorieDemande.AUTORISATION && d.getAutoHeureSortieReelle() != null && d.getAutoHeureRetourReel() != null) {
-        //     // Calcul minutes réelles, conversion en jours, puis debiterSoldeConge(employe, joursFractionnes);
-        // }
-
         return saved;
     }
-
     @Override
     @Transactional
     public Demande refuserDemande(Long demandeId, String matriculeValidateur, String commentaire) {
@@ -510,7 +528,7 @@ public class DemandeServiceImpl implements DemandeService {
         if (roleCreat == null) return false;
 
         boolean chefPeut = (validateur.getRole() == Role.CHEF) && (roleCreat == Role.EMPLOYE);
-        boolean drhPeut  = (validateur.getRole() == Role.DRH)  && (roleCreat == Role.CHEF);
+        boolean drhPeut = (validateur.getRole() == Role.DRH) && (roleCreat == Role.CHEF);
 
         return chefPeut || drhPeut;
     }
@@ -549,7 +567,6 @@ public class DemandeServiceImpl implements DemandeService {
         historiqueDemandeRepository.save(h);
     }
 
-    // (facultatif) si tu as d’autres opérations :
     private void historiserModification(Demande saved) {
         HistoriqueDemande h = HistoriqueDemande.creerHistoriqueModification(saved);
         historiqueDemandeRepository.save(h);
@@ -571,15 +588,16 @@ public class DemandeServiceImpl implements DemandeService {
     }
 
     @Override
-    public List<Demande> getHistoriqueDemandes(String matriculeEmploye) {
-        Employe employe = employeRepository.findByMatricule(matriculeEmploye)
+    public List<Demande> getHistoriqueDemandes(String matricule) {
+        Employe employe = employeRepository.findByMatricule(matricule)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Employé non trouvé"));
 
-        return demandeRepository.findByEmployeOrderByDateDemandeDesc(employe);
+        return demandeRepository.findByEmployeOrderByDateCreationDesc(employe);
     }
 
     /**
      * Récupère toutes les demandes en attente pour un chef donné.
+     *
      * @param matriculeChef Le matricule du chef.
      * @return La liste des demandes en attente.
      */
@@ -669,13 +687,24 @@ public class DemandeServiceImpl implements DemandeService {
         // This requires calculating taken leaves and total balance
         // Implementation depends on how you track taken leaves
 
+        LocalDateTime start = parseDateTime(startDate);
+        LocalDateTime end = parseDateTime(endDate);
+
         List<Demande> congesValides = demandeRepository.findByStatutAndCategorieInAndDateCreationBetween(
                 StatutDemande.VALIDEE,
                 Arrays.asList(CategorieDemande.CONGE_STANDARD, CategorieDemande.CONGE_EXCEPTIONNEL),
-                parseDateTime(startDate), parseDateTime(endDate)
+                start, end
         );
 
-        double joursPris = calculateTotalDaysTaken(congesValides);
+        double joursPris = congesValides.stream()
+                .filter(demande -> demande.getTypeDemande() != null && demande.getTypeDemande().deductsFromSolde())
+                .mapToDouble(demande -> {
+                    if (demande.getCongeDateDebut() != null && demande.getCongeDateFin() != null) {
+                        return ChronoUnit.DAYS.between(demande.getCongeDateDebut(), demande.getCongeDateFin()) + 1;
+                    }
+                    return 0;
+                })
+                .sum();
 
         // Get total balance from all employees
         double soldeTotal = calculateTotalBalance();
@@ -718,7 +747,10 @@ public class DemandeServiceImpl implements DemandeService {
                         start, end
                 );
 
-                serviceJoursPris += calculateTotalDaysTaken(congesValides);
+                serviceJoursPris += congesValides.stream()
+                        .filter(d -> d.getTypeDemande() != null && d.getTypeDemande().deductsFromSolde())
+                        .mapToDouble(d -> ChronoUnit.DAYS.between(d.getCongeDateDebut(), d.getCongeDateFin()) + 1)
+                        .sum();
             }
 
             serviceDaysMap.put(service, serviceJoursPris);
@@ -787,47 +819,7 @@ public class DemandeServiceImpl implements DemandeService {
         return result;
     }
 
-    // Helper methods
-    private LocalDateTime parseDateTime(String dateTimeStr) {
-        if (dateTimeStr == null || dateTimeStr.isEmpty()) {
-            return LocalDateTime.of(2000, 1, 1, 0, 0); // Default start date
-        }
-        return LocalDateTime.parse(dateTimeStr);
-    }
-
-    private long calculateTotalPossibleDemands(LocalDateTime start, LocalDateTime end) {
-        // This is a business logic decision
-        // For example: number of employees * working days in the period
-        long numberOfEmployees = employeRepository.count();
-        long workingDays = ChronoUnit.DAYS.between(start.toLocalDate(), end.toLocalDate()) + 1;
-
-        return numberOfEmployees * workingDays;
-    }
-
-    private double calculateTotalDaysTaken(List<Demande> conges) {
-        return conges.stream()
-                .mapToDouble(demande -> {
-                    if (demande.getCongeDateDebut() != null && demande.getCongeDateFin() != null) {
-                        return ChronoUnit.DAYS.between(
-                                demande.getCongeDateDebut(),
-                                demande.getCongeDateFin()
-                        ) + 1; // Inclusive
-                    }
-                    return 0;
-                })
-                .sum();
-    }
-
-    private double calculateTotalBalance() {
-        return employeRepository.findAll().stream()
-                .mapToDouble(emp -> soldeCongeService.getSoldeActuel(emp.getMatricule())
-                        .orElse(SoldeConge.builder().soldeActuel(0f).build())
-                        .getSoldeActuel())
-                .sum();
-    }
-
-
-
+    // In your DemandeService interface, add:
     @Override
     public List<StatusDistributionDTO> getStatusDistribution(LocalDateTime start, LocalDateTime end) {
         // Get the status counts
@@ -885,10 +877,7 @@ public class DemandeServiceImpl implements DemandeService {
                     .build());
         }
     }
-
-
-
-    // dashboard employe and concearge *********************/////////////////////////////////////////////////////////
+// dashboard employe and concearge *********************/////////////////////////////////////////////////////////
 
     @Override
     public EmployeDashboardDTO getEmployeDashboard(String matricule, String role) {
@@ -913,7 +902,7 @@ public class DemandeServiceImpl implements DemandeService {
                 .build();
 
         // Get recent demands (last 5)
-        List<Demande> recentDemandes = demandeRepository.findByEmployeMatricule(matricule)
+        List<Demande> recentDemandes = demandeRepository.findTop3ByEmployeMatriculeOrderByDateCreationDesc(matricule)
                 .stream()
                 .sorted(Comparator.comparing(Demande::getDateCreation).reversed())
                 .limit(5)
@@ -968,19 +957,13 @@ public class DemandeServiceImpl implements DemandeService {
                 })
                 .collect(Collectors.toList());
     }
+
     @Override
-    public List<Demande> getDemandesValideesEtRefuseesDuService(String matriculeChef) {
-        List<StatutDemande> statuts = Arrays.asList(
-                StatutDemande.REFUSEE,
-                StatutDemande.VALIDEE
-        );
-
-        return demandeRepository.findDemandesByServiceAndStatutsAndDateRange(
-                matriculeChef,
-                statuts
-        );
+    public List<Demande> getDemandesValideesEtRefuseesDuService(
+            String service){
+        List<StatutDemande> statuts = Arrays.asList(StatutDemande.VALIDEE, StatutDemande.REFUSEE);
+        return demandeRepository.findDemandesByServiceAndStatuts(service, statuts);
     }
-
 
     private Map<String, Long> getStatusDistributionForEmployee(String matricule, LocalDateTime start, LocalDateTime end) {
         List<Demande> employeeDemands = demandeRepository.findByEmployeAndDateCreationBetween(
@@ -1027,5 +1010,43 @@ public class DemandeServiceImpl implements DemandeService {
         }
 
         return recente;
+    }
+
+    private LocalDateTime parseDateTime(String dateTimeStr) {
+        if (dateTimeStr == null || dateTimeStr.isEmpty()) {
+            return LocalDateTime.of(2000, 1, 1, 0, 0); // Default start date
+        }
+        return LocalDateTime.parse(dateTimeStr);
+    }
+
+    private long calculateTotalPossibleDemands(LocalDateTime start, LocalDateTime end) {
+        // This is a business logic decision
+        // For example: number of employees * working days in the period
+        long numberOfEmployees = employeRepository.count();
+        long workingDays = ChronoUnit.DAYS.between(start.toLocalDate(), end.toLocalDate()) + 1;
+
+        return numberOfEmployees * workingDays;
+    }
+
+    private double calculateTotalDaysTaken(List<Demande> conges) {
+        return conges.stream()
+                .mapToDouble(demande -> {
+                    if (demande.getCongeDateDebut() != null && demande.getCongeDateFin() != null) {
+                        return ChronoUnit.DAYS.between(
+                                demande.getCongeDateDebut(),
+                                demande.getCongeDateFin()
+                        ) + 1; // Inclusive
+                    }
+                    return 0;
+                })
+                .sum();
+    }
+
+    private double calculateTotalBalance() {
+        return employeRepository.findAll().stream()
+                .mapToDouble(emp -> soldeCongeService.getSoldeActuel(emp.getMatricule())
+                        .orElse(SoldeConge.builder().soldeActuel(0f).build())
+                        .getSoldeActuel())
+                .sum();
     }
 }

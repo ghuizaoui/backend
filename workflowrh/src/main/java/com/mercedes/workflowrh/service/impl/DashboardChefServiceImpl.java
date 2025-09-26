@@ -1,4 +1,4 @@
-// DashboardChefServiceImpl.java
+// DashboardChefServiceImpl.java (updated calculerJoursCongesPris with filter)
 package com.mercedes.workflowrh.service.impl;
 
 import com.mercedes.workflowrh.dto.dashboardDto.*;
@@ -121,8 +121,13 @@ public class DashboardChefServiceImpl implements DashboardChefService {
                 dateDebut, dateFin
         );
 
+        // Filtrer seulement les types qui déduisent du solde
+        List<Demande> filteredConges = congesValides.stream()
+                .filter(demande -> demande.getTypeDemande() != null && demande.getTypeDemande().deductsFromSolde())
+                .collect(Collectors.toList());
+
         // Calculer les jours pris
-        double joursPris = congesValides.stream()
+        double joursPris = filteredConges.stream()
                 .mapToDouble(demande -> {
                     if (demande.getCongeDateDebut() != null && demande.getCongeDateFin() != null) {
                         return ChronoUnit.DAYS.between(demande.getCongeDateDebut(), demande.getCongeDateFin()) + 1;
@@ -143,7 +148,7 @@ public class DashboardChefServiceImpl implements DashboardChefService {
         double soldeRestant = soldeTotal - joursPris;
 
         // Calculer l'évolution par mois
-        List<EvolutionConges> evolutionParMois = calculerEvolutionCongesParMois(matriculesService, dateDebut, dateFin);
+        List<EvolutionConges> evolutionParMois = calculerEvolutionCongesParMois(filteredConges, dateDebut, dateFin);
 
         return JoursCongesPris.builder()
                 .joursPris(joursPris)
@@ -154,19 +159,12 @@ public class DashboardChefServiceImpl implements DashboardChefService {
                 .build();
     }
 
-    private List<EvolutionConges> calculerEvolutionCongesParMois(List<String> matriculesService, LocalDateTime dateDebut, LocalDateTime dateFin) {
+    private List<EvolutionConges> calculerEvolutionCongesParMois(List<Demande> congesValides, LocalDateTime dateDebut, LocalDateTime dateFin) {
         // Implémentation simplifiée - à adapter selon vos besoins
         List<EvolutionConges> evolution = new ArrayList<>();
 
         // Exemple: regrouper par mois
         Map<String, Double> joursParMois = new HashMap<>();
-
-        List<Demande> congesValides = demandeRepository.findByEmployeMatriculeInAndStatutAndCategorieInAndDateCreationBetween(
-                matriculesService,
-                StatutDemande.VALIDEE,
-                Arrays.asList(CategorieDemande.CONGE_STANDARD, CategorieDemande.CONGE_EXCEPTIONNEL),
-                dateDebut, dateFin
-        );
 
         for (Demande demande : congesValides) {
             if (demande.getCongeDateDebut() != null) {

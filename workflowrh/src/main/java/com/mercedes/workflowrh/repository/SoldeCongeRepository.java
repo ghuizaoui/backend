@@ -2,7 +2,11 @@ package com.mercedes.workflowrh.repository;
 
 import com.mercedes.workflowrh.entity.SoldeConge;
 import com.mercedes.workflowrh.entity.Employe;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -14,7 +18,7 @@ public interface SoldeCongeRepository extends JpaRepository<SoldeConge, Long> {
 
 
     // Trouver le solde d’un employé (dernier solde)
-    Optional<SoldeConge> findByEmploye(Employe employe);
+
 
     // Trouver le solde d’un employé pour une année donnée
     Optional<SoldeConge> findByEmployeAndAnnee(Employe employe, Integer annee);
@@ -32,4 +36,29 @@ public interface SoldeCongeRepository extends JpaRepository<SoldeConge, Long> {
 
     // Dans SoldeCongeRepository.java
     Optional<SoldeConge> findTopByEmployeMatriculeOrderByAnneeDesc(String matricule);
+
+
+
+
+
+
+
+
+
+    @Query("SELECT sc FROM SoldeConge sc WHERE sc.employe = :employe")
+    Optional<SoldeConge> findByEmploye(@Param("employe") Employe employe);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT sc FROM SoldeConge sc WHERE sc.employe = :employe")
+    Optional<SoldeConge> findByEmployeWithLock(@Param("employe") Employe employe);
+
+    @Query("SELECT sc FROM SoldeConge sc WHERE sc.employe = :employe")
+    List<SoldeConge> findAllByEmploye(@Param("employe") Employe employe);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT sc FROM SoldeConge sc WHERE sc.employe = :employe")
+    List<SoldeConge> findAllByEmployeWithLock(@Param("employe") Employe employe);
+
+
+
 }
