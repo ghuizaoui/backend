@@ -50,11 +50,11 @@ public interface DemandeService {
  );
  DemandeDetailDTO findDetail(Long id);
 
- List<DemandeListDTO> findAllForChef(String matriculeChef);
+ List<DemandeListDTO> findAllForChef(String matriculeChef, long chefLevel, String service);
 
  List<DemandeListDTO> findAllForDrh();
 
- Demande validerDemande(Long demandeId, String matriculeValidateur);
+ Demande  validerDemande(Long demandeId, String matriculeValidateur);
  Demande refuserDemande(Long demandeId, String matriculeValidateur, String commentaire);
 
  List<Demande> getHistoriqueDemandes(String matricule);

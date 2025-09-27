@@ -22,4 +22,8 @@ public interface EmployeRepository extends JpaRepository<Employe, String> {
 
     List<Employe> findByService(String service);
     long count();
+    Optional<Employe> findByServiceAndChefLevel(String m , long chefLevel);
+
+
+    Employe getEmployeByMatricule(String matricule);
 }

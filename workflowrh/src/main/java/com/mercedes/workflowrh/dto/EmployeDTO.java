@@ -22,4 +22,5 @@ public class EmployeDTO {
     private LocalDate dateEmbauche;
     private TypeContrat typeContrat;
     private Role role;
+    private Integer chefLevel;
 }

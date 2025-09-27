@@ -36,7 +36,7 @@ import java.util.logging.Logger;
 @RequiredArgsConstructor
 public class DemandeController {
 
-    private final DemandeService        demandeService;
+    private final DemandeService  demandeService;
     private  final SoldeCongeService soldeCongeService;
     private static final Logger logger = Logger.getLogger(DemandeController.class.getName());
     private final EmployeService employeService;
@@ -317,12 +317,23 @@ public class DemandeController {
         List<Demande> demandes = demandeService.getHistoriqueSubordonnes(matriculeChef);
         return ResponseEntity.ok(demandes);
     }
-
     @GetMapping("/chef")
-    public List<DemandeListDTO> listForChef() {
+    public ResponseEntity<List<DemandeListDTO>> listForChef() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Utilisateur non authentifié.");
+        }
         String matriculeChef = auth.getName();
-        return demandeService.findAllForChef(matriculeChef);
+        Employe chef = employeService.getEmployeByMatricule(matriculeChef)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Chef non trouvé"));
+
+        if (chef.getRole() != com.mercedes.workflowrh.entity.Role.CHEF ||
+                chef.getChefLevel() == null ||
+                (chef.getChefLevel() != 1 && chef.getChefLevel() != 2)) {
+            return ResponseEntity.ok(List.of()); // Return empty list for non-chefs or invalid chef levels
+        }
+
+        return ResponseEntity.ok(demandeService.findAllForChef(matriculeChef, chef.getChefLevel(), chef.getService()));
     }
 
     @GetMapping("/drh")

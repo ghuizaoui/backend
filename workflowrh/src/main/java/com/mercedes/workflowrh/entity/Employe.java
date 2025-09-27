@@ -50,7 +50,7 @@ public class Employe {
     private Boolean drhSuper = false;
     private Boolean estBanni = false; // vrai si l'employé ne peut pas se connecter
 
-
+    private Integer chefLevel; // New field: 1 for chef number one, 2 for chef number two, null otherwise
     @OneToMany(mappedBy = "employe")
     @JsonIgnore
     private List<Demande> demandes;

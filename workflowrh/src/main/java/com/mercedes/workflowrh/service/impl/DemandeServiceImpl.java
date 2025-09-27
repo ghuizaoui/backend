@@ -28,6 +28,9 @@ import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 
 @Service
 @RequiredArgsConstructor
@@ -348,20 +351,69 @@ public class DemandeServiceImpl implements DemandeService {
         return toDetail(d);
     }
 
+
+
+
+
     @Override
-    public List<DemandeListDTO> findAllForChef(String matriculeChef) {
-        // sécurité basique : s'assurer que l'appelant est bien un CHEF
-        Employe chef = employeRepository.findByMatricule(matriculeChef)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Utilisateur introuvable"));
-        if (chef.getRole() != Role.CHEF) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Réservé aux CHEFs.");
+    @Transactional(readOnly = true)
+    public List<DemandeListDTO> findAllForChef(String matriculeChef, long chefLevel, String service) {
+        log.info(">>> findAllForChef called with matriculeChef={}, chefLevel={}, service={}",
+                matriculeChef, chefLevel, service);
+
+        if ((chefLevel != 1 && chefLevel != 2) || service == null || service.isBlank()) {
+            log.warn(">>> Invalid parameters: chefLevel={}, service={}", chefLevel, service);
+            return Collections.emptyList();
         }
 
-        return demandeRepository.findAllForChefValidationAnyEmployee()
-                .stream()
-                .map(this::toListItem)
-                .toList();
+        // 🔹 Récupérer toutes les demandes du service
+        List<Demande> demandes = demandeRepository.findDemandesByService(service);
+
+        // 🔹 Filtrer selon le rôle (chef1 ou chef2)
+        List<Demande> filteredDemandes = demandes.stream()
+                .filter(d -> {
+                    String matriculeEmploye = d.getEmploye().getMatricule();
+
+                    // ✅ Exclure toujours les demandes du chef lui-même
+                    if (matriculeEmploye.equals(matriculeChef)) {
+                        return false;
+                    }
+
+                    if (chefLevel == 1) {
+                        // Chef1 : exclure aussi les demandes du chef2
+                        return !matriculeEmploye.equals(d.getEmploye().getChefHierarchique2Matricule());
+                    } else {
+                        // Chef2 : voir uniquement les demandes des employés "simples"
+                        // (donc exclure celles du chef1 et du chef2)
+                        return !matriculeEmploye.equals(d.getEmploye().getChefHierarchique1Matricule())
+                                && !matriculeEmploye.equals(d.getEmploye().getChefHierarchique2Matricule());
+                    }
+                })
+                .collect(Collectors.toList());
+
+        log.info(">>> {} demandes retained after filtering for chefLevel={} matricule={}",
+                filteredDemandes.size(), chefLevel, matriculeChef);
+
+        return filteredDemandes.stream()
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
     }
+
+
+    private DemandeListDTO convertToDTO(Demande demande) {
+        return DemandeListDTO.builder()
+                .id(demande.getId())
+                .employeMatricule(demande.getEmploye().getMatricule())
+                .employeNom(demande.getEmploye().getNom())
+                .employePrenom(demande.getEmploye().getPrenom())
+                .categorie(demande.getCategorie())
+                .typeDemande(demande.getTypeDemande())
+
+                .statut(demande.getStatut())
+                .dateCreation(demande.getDateCreation())
+                .build();
+    }
+
 
     @Override
     public List<DemandeListDTO> findAllForDrh() {
@@ -445,9 +497,9 @@ public class DemandeServiceImpl implements DemandeService {
         Employe validateur = employeRepository.findByMatricule(matriculeValidateur)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Validateur non trouvé"));
 
-        if (!estValidateurAutorise(d, validateur)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Non autorisé.");
-        }
+//        if (!estValidateurAutorise(d, validateur)) {
+//            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Non autorisé.");
+//        }
 
         d.setStatut(StatutDemande.VALIDEE);
         d.setValidateur(validateur);

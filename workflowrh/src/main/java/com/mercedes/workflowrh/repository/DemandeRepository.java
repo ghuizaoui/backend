@@ -180,4 +180,40 @@ public interface DemandeRepository extends JpaRepository<Demande, Long> {
     List<Demande> findDemandesByServiceAndStatuts(
             @Param("service") String service,
             @Param("statuts") List<StatutDemande> statuts);
+
+
+    List<Demande>   findByEmployeChefHierarchique2Matricule(String m);
+
+    @Query("SELECT d FROM Demande d WHERE d.employe.service = :service AND d.employe.chefHierarchique2Matricule = :chefLevel2Matricules ")
+    List<Demande> findByEmployeServiceAndChefHierarchique2MatriculeIn(
+            @Param("service") String service,
+            @Param("chefLevel2Matricules") String chefLevel2Matricules
+
+    );
+
+
+
+
+    @Query("""
+       SELECT d FROM Demande d
+       JOIN d.employe e
+       WHERE e.service = :service
+       """)
+    List<Demande> findDemandesByService(@Param("service") String service);
+
+
+
+    @Query("""
+    SELECT d FROM Demande d
+    JOIN d.employe e
+    WHERE e.service = :service
+    AND e.chefHierarchique2Matricule = :chef2Matricule
+""")
+    List<Demande> findDemandesByServiceAndChef2Matricule(
+            @Param("service") String service,
+            @Param("chef2Matricule") String chef2Matricule
+    );
+
+
+
 }
