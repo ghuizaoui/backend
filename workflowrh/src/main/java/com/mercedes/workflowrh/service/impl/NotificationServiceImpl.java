@@ -42,7 +42,7 @@ public class NotificationServiceImpl implements NotificationService {
     private static final DateTimeFormatter T_HM   = DateTimeFormatter.ofPattern("HH:mm", FR);
 
     @Override @Transactional
-    public void notifyManagerOfNewDemand(Demande d) {
+    public void notifyManagerOfNewDemand(Demande d,String service) {
         Employe creator = d.getEmploye();
         if (creator == null) return;
 
@@ -57,7 +57,7 @@ public class NotificationServiceImpl implements NotificationService {
                         .forEach(c -> addIfNotBlank(destinataires, c.getMatricule()));
             }
         } else if (creator.getRole() == Role.CHEF) {
-            employeRepository.findByRole(Role.DRH)
+            employeRepository.findByServiceAndRole(service,Role.DRH)
                     .forEach(drh -> addIfNotBlank(destinataires, drh.getMatricule()));
         }
 
@@ -153,6 +153,63 @@ public class NotificationServiceImpl implements NotificationService {
         if (creator == null) return;
         sendToMatricule(d, creator.getMatricule(),
                 "Demande créée", buildMessageCreation(d));
+    }
+
+    @Override
+    @Transactional
+    public void notifyInterimaire(String interimaireMatricule, Demande demandeConge) {
+        if (interimaireMatricule == null || interimaireMatricule.isBlank() || demandeConge == null) {
+            return;
+        }
+
+        Employe interimaire = employeRepository.findByMatricule(interimaireMatricule).orElse(null);
+        Employe demandeur = demandeConge.getEmploye();
+
+        if (interimaire == null || demandeur == null) {
+            log.warn("Impossible de notifier l'intérimaire: employé introuvable (matricule: {})", interimaireMatricule);
+            return;
+        }
+
+        String subject = "Désignation comme intérimaire";
+        String message = buildMessageInterimaire(demandeConge, demandeur, interimaire);
+
+        sendToMatricule(demandeConge, interimaireMatricule, subject, message);
+    }
+
+    /** Construit le message de notification pour l'intérimaire */
+    private String buildMessageInterimaire(Demande demandeConge, Employe demandeur, Employe interimaire) {
+        String nomDemandeur = fullName(demandeur);
+        String periode = buildPeriodeConge(demandeConge);
+
+        StringBuilder message = new StringBuilder();
+        message.append("Vous avez été désigné(e) comme intérimaire pour ")
+                .append(nomDemandeur)
+                .append(" pendant son ")
+                .append(libelleType(demandeConge.getTypeDemande()));
+
+        if (periode != null && !periode.isEmpty()) {
+            message.append(" (").append(periode).append(")");
+        }
+
+        message.append(".");
+
+        return message.toString();
+    }
+
+    /** Construit la période de congé formatée */
+    private String buildPeriodeConge(Demande demandeConge) {
+        if (demandeConge.getCongeDateDebut() == null) {
+            return null;
+        }
+
+        String periode = D_DAY.format(demandeConge.getCongeDateDebut());
+
+        if (demandeConge.getCongeDateFin() != null &&
+                !demandeConge.getCongeDateFin().isEqual(demandeConge.getCongeDateDebut())) {
+            periode += " → " + D_DAY.format(demandeConge.getCongeDateFin());
+        }
+
+        return periode;
     }
 
     @Override @Transactional

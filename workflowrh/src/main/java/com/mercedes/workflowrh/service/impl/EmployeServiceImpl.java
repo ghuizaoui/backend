@@ -40,7 +40,14 @@ public class EmployeServiceImpl implements EmployeService {
         // Validate input
         validateEmployeDTO(dto);
 
-        String matricule = genererMatricule(dto.getRole(), dto.getPrenom(), dto.getNom());
+        String matriculeBase = genererMatricule(dto.getRole(), dto.getPrenom(), dto.getNom());
+        String matricule = matriculeBase;
+
+        int counter = 1;
+        while (employeRepository.existsByMatricule(matricule)) {
+            matricule = matriculeBase + String.format("%03d", counter);
+            counter++;
+        }
         String rawPassword = genererMotDePasse();
 
         Employe emp = Employe.builder()
@@ -59,11 +66,15 @@ public class EmployeServiceImpl implements EmployeService {
                 .chefLevel(dto.getChefLevel())
                 .estBanni(false)
                 .drhSuper(false)
+                .chefHierarchique1Matricule(dto.getChefHierarchique1Matricule())  //  copier du DTO
+                .chefHierarchique2Matricule(dto.getChefHierarchique2Matricule())
                 .build();
 
         // Assign existing chefs if available and employee is not a chef
         if (dto.getService() != null && !dto.getService().isEmpty() && (dto.getChefLevel() == null || dto.getRole() != Role.CHEF)) {
-            assignExistingChefs(emp, dto.getService());
+            if (emp.getChefHierarchique1Matricule()==null){assignExistingChef1(emp, dto.getService());}
+            if (emp.getChefHierarchique2Matricule()==null){assignExistingChef2(emp, dto.getService());}
+
         }
 
         emp = employeRepository.save(emp);
@@ -153,6 +164,8 @@ public class EmployeServiceImpl implements EmployeService {
         emp.setTypeContrat(dto.getTypeContrat());
         emp.setRole(dto.getRole());
         emp.setChefLevel(dto.getChefLevel());
+        emp.setChefHierarchique1Matricule(dto.getChefHierarchique1Matricule());
+        emp.setChefHierarchique2Matricule(dto.getChefHierarchique2Matricule());
 
         emp = employeRepository.save(emp);
 
@@ -160,8 +173,10 @@ public class EmployeServiceImpl implements EmployeService {
         handleChefLevel(emp, oldService);
 
         // Assign existing chefs if service changed and employee is not a chef
-        if (!oldService.equals(dto.getService()) && (dto.getChefLevel() == null || dto.getRole() != Role.CHEF)) {
-            assignExistingChefs(emp, dto.getService());
+        if (dto.getService() != null && !dto.getService().isEmpty() && (dto.getChefLevel() == null || dto.getRole() != Role.CHEF)) {
+            if (emp.getChefHierarchique1Matricule()==null){assignExistingChef1(emp, dto.getService());}
+            if (emp.getChefHierarchique2Matricule()==null){assignExistingChef2(emp, dto.getService());}
+
         }
 
         return emp;
@@ -181,6 +196,11 @@ public class EmployeServiceImpl implements EmployeService {
     @Override
     public Optional<Employe> getEmployeProfile(String matricule) {
         return employeRepository.findByMatricule(matricule);
+    }
+
+    @Override
+    public List<Employe> getEmployeByRole(Role role) {
+        return  employeRepository.findByRole(role);
     }
 
     private void validateEmployeDTO(EmployeDTO dto) {
@@ -204,7 +224,7 @@ public class EmployeServiceImpl implements EmployeService {
         }
     }
 
-    private void assignExistingChefs(Employe emp, String service) {
+    private void assignExistingChef1(Employe emp, String service) {
         if (emp.getChefLevel() != null) return; // Skip if employee is a chef
 
         // Assign chef 1 if exists and not already assigned
@@ -212,15 +232,22 @@ public class EmployeServiceImpl implements EmployeService {
                 .filter(chef -> emp.getChefHierarchique1Matricule() == null || !emp.getChefHierarchique1Matricule().equals(chef.getMatricule()))
                 .ifPresent(chef -> emp.setChefHierarchique1Matricule(chef.getMatricule()));
 
+
+
+        if (emp.getChefHierarchique1Matricule() != null ) {
+            employeRepository.save(emp);
+        }
+    }
+    private void assignExistingChef2(Employe emp, String service) {
         // Assign chef 2 if exists and not already assigned
         employeRepository.findByServiceAndChefLevel(service, 2)
                 .filter(chef -> emp.getChefHierarchique2Matricule() == null || !emp.getChefHierarchique2Matricule().equals(chef.getMatricule()))
                 .ifPresent(chef -> emp.setChefHierarchique2Matricule(chef.getMatricule()));
-
-        if (emp.getChefHierarchique1Matricule() != null || emp.getChefHierarchique2Matricule() != null) {
+        if ( emp.getChefHierarchique2Matricule() != null) {
             employeRepository.save(emp);
         }
     }
+
 
     private void handleChefLevel(Employe emp, String oldService) {
         Integer level = emp.getChefLevel();

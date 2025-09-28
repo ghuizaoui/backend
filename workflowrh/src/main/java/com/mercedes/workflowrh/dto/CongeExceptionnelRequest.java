@@ -14,8 +14,11 @@ public class CongeExceptionnelRequest {
     private LocalDate dateDebut;
     @NotNull
     private LocalTime heureDebut;
-    @NotNull
+
     private LocalDate dateFin;
-    @NotNull
+
     private LocalTime heureFin;
+
+
+    private  String interimaireMatricule;
 }

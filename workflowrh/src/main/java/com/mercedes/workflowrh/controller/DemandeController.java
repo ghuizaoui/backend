@@ -6,10 +6,12 @@ import com.mercedes.workflowrh.entity.*;
 import com.mercedes.workflowrh.repository.DemandeRepository;
 import com.mercedes.workflowrh.service.DemandeService;
 import com.mercedes.workflowrh.service.EmployeService;
+import com.mercedes.workflowrh.service.MailService;
 import com.mercedes.workflowrh.service.SoldeCongeService;
 import com.mercedes.workflowrh.service.impl.HolidayService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
@@ -31,6 +33,7 @@ import java.util.List;
 import java.util.logging.Logger;
 
 
+@Slf4j
 @RestController
 @RequestMapping("/api/demandes")
 @RequiredArgsConstructor
@@ -42,6 +45,7 @@ public class DemandeController {
     private final EmployeService employeService;
     private  final DemandeRepository demandeRepository;
     private  final HolidayService holidayService;
+    private  final MailService mailService ;
 
 
     @GetMapping("/{id}/download")
@@ -137,7 +141,7 @@ public class DemandeController {
             Demande demande = demandeService.createCongeExceptionnel(
                     req.getTypeDemande(),
                     req.getDateDebut(), req.getHeureDebut(),
-                    req.getDateFin(), req.getHeureFin(),
+                    req.getDateFin(), req.getHeureFin(),req.getInterimaireMatricule(),
                     file
             );
             logger.info("Successfully created CONGE_EXCEPTIONNEL demand with ID: " + demande.getId());
@@ -656,12 +660,37 @@ public class DemandeController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Erreur lors du comptage des demandes par employé et date : " + e.getMessage());
         }
+
+
+
+
+
+
+
+
+
+
+
     }
 
 
     //----------------------------------demades et solde conge for my account
 
+    @GetMapping("get-dg-demandes")
+    public ResponseEntity<?> getDemandesDG() {
+        try{
 
+            List<Demande> d= demandeService.getChefsDemandes();
+            if (!d.isEmpty()) {
+                log.info(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> " + d.get(0).getTypeDemande());
+            }
+
+            return  ResponseEntity.ok(demandeService.getChefsDemandes());
+        }
+        catch(Exception e){
+            return  ResponseEntity.status(500).body(e.getMessage());
+        }
+    }
 
 
 }

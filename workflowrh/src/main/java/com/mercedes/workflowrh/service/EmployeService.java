@@ -2,6 +2,7 @@ package com.mercedes.workflowrh.service;
 
 import com.mercedes.workflowrh.dto.EmployeDTO;
 import com.mercedes.workflowrh.entity.Employe;
+import com.mercedes.workflowrh.entity.Role;
 
 import java.util.List;
 import java.util.Optional;
@@ -16,8 +17,7 @@ public interface EmployeService {
     Optional<Employe> getEmployeProfile(String matricule);
 
 
-
-
+    List<Employe> getEmployeByRole(Role role);
 }
 
 

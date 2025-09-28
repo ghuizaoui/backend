@@ -23,4 +23,8 @@ public class EmployeDTO {
     private TypeContrat typeContrat;
     private Role role;
     private Integer chefLevel;
+
+
+    private String chefHierarchique1Matricule;
+    private String chefHierarchique2Matricule;
 }

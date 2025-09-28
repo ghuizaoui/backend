@@ -26,7 +26,7 @@ public interface DemandeService {
  Demande createCongeExceptionnel(
          TypeDemande typeDemande,
          LocalDate dateDebut, LocalTime heureDebut,
-         LocalDate dateFin,   LocalTime heureFin, MultipartFile file
+         LocalDate dateFin,   LocalTime heureFin,String interimaireMatricule, MultipartFile file
  );
 
  Demande createAutorisation(
@@ -119,4 +119,6 @@ public interface DemandeService {
 
  public List<Demande> getDemandesValideesEtRefuseesDuService(
          String service);
+
+  List<Demande> getChefsDemandes();
 }

@@ -3,10 +3,14 @@
     import com.mercedes.workflowrh.entity.Demande;
 
     public interface NotificationService {
-        void notifyManagerOfNewDemand(Demande d);
+        void notifyManagerOfNewDemand(Demande d,
+                                      String service);
         void notifyEmployeeOnValidation(Demande d);
         void notifyEmployeeOnRefuse(Demande d);
         void markAsRead(Long notifId, String matricule);
         void notifyEmployeeOnCreation(Demande d);
+
+
+        void notifyInterimaire(String interimaireMatricule,Demande demandeConge);
 
     }

@@ -77,8 +77,7 @@ public class DemandeServiceImpl implements DemandeService {
                 .build();
 
         Demande saved = demandeRepository.save(d); // Save only the Demande
-        notificationService.notifyManagerOfNewDemand(saved); // Notify manager
-
+        notificationService.notifyManagerOfNewDemand(saved,employe.getService()); // Notify manager
         return saved;
     }
     @Override
@@ -205,10 +204,10 @@ public class DemandeServiceImpl implements DemandeService {
 
     @Override
     @Transactional
-    public Demande createCongeExceptionnel(
+    public Demande  createCongeExceptionnel(
             TypeDemande typeDemande,
             LocalDate dateDebut, LocalTime heureDebut,
-            LocalDate dateFin, LocalTime heureFin,
+            LocalDate dateFin, LocalTime heureFin,String interimaireMatricule,
             MultipartFile file) { // Added file parameter
 
         assertType(typeDemande, CategorieDemande.CONGE_EXCEPTIONNEL);
@@ -242,8 +241,8 @@ public class DemandeServiceImpl implements DemandeService {
                 .build();
 
         Demande saved = demandeRepository.save(d); // Save only the Demande
-        notificationService.notifyManagerOfNewDemand(saved); // Notify manager
-
+        notificationService.notifyManagerOfNewDemand(saved,employe.getService()); // Notify manager
+        notificationService.notifyInterimaire(interimaireMatricule,d);
         return saved;
     }
     @Override
@@ -305,7 +304,7 @@ public class DemandeServiceImpl implements DemandeService {
                 .build();
 
         Demande saved = demandeRepository.save(d); // Save only the Demande
-        notificationService.notifyManagerOfNewDemand(saved); // Notify manager
+        notificationService.notifyManagerOfNewDemand(saved,employe.getService()); // Notify manager
 
         return saved;
     }
@@ -340,7 +339,7 @@ public class DemandeServiceImpl implements DemandeService {
                 .build();
 
         Demande saved = demandeRepository.save(d); // Save only the Demande
-        notificationService.notifyManagerOfNewDemand(saved); // Notify manager
+        notificationService.notifyManagerOfNewDemand(saved, employe.getService()); // Notify manager
 
         return saved;
     }
@@ -1100,5 +1099,11 @@ public class DemandeServiceImpl implements DemandeService {
                         .orElse(SoldeConge.builder().soldeActuel(0f).build())
                         .getSoldeActuel())
                 .sum();
+    }
+
+
+    @Override
+    public   List<Demande> getChefsDemandes() {
+        return  demandeRepository.getDemandeByEmployeDrhSuper();
     }
 }

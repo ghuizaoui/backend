@@ -216,4 +216,14 @@ public interface DemandeRepository extends JpaRepository<Demande, Long> {
 
 
 
+    @Query("""
+    SELECT d FROM Demande d
+    JOIN d.employe e
+    WHERE e.drhSuper = true
+""")
+    List<Demande> getDemandeByEmployeDrhSuper();
+
+
+
+
 }

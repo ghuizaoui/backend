@@ -26,4 +26,8 @@ public interface EmployeRepository extends JpaRepository<Employe, String> {
 
 
     Employe getEmployeByMatricule(String matricule);
+
+
+    List<Employe> findByServiceAndRole(String service, Role role);
+    boolean existsByMatricule(String matricule);
 }

@@ -7,6 +7,7 @@ import com.mercedes.workflowrh.entity.SoldeConge;
 import com.mercedes.workflowrh.service.EmployeService;
 import com.mercedes.workflowrh.service.SoldeCongeService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -17,6 +18,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.List;
 import java.util.Optional;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/employes")
 @RequiredArgsConstructor
@@ -133,12 +135,14 @@ public class EmployeController {
 
 // Si tu veux vérifier uniquement les DRH
             if (employe.getRole() != Role.DRH) {
-                return ResponseEntity.badRequest().body("user n'est pas DRH");
+                log.info(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>n'est pas un drh");
+                return ResponseEntity.badRequest().body(false);
             }
 
 // Vérification safe pour Boolean
             if (!Boolean.TRUE.equals(employe.getDrhSuper())) {
-                return ResponseEntity.badRequest().body("user n'est pas super DRH");
+                log.info(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>n'est pas un super drh");
+                return ResponseEntity.ok(false);
             }
 
             return ResponseEntity.ok(true);
@@ -167,5 +171,16 @@ public class EmployeController {
                 return  ResponseEntity.status(500).body(false);
             }
 
+        }
+
+
+        @GetMapping("get-chefs")
+    public  ResponseEntity<?> getChefs() {
+        try{
+            return ResponseEntity.ok(employeService.getEmployeByRole(Role.CHEF)) ;
+
+        }catch (Exception e){
+            return  ResponseEntity.status(500).body(false);
+        }
         }
 }
