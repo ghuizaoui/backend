@@ -2,6 +2,7 @@
 package com.mercedes.workflowrh.controller;
 
 import com.mercedes.workflowrh.dto.*;
+import com.mercedes.workflowrh.dto.dashboardDto.CategoryTypeDistributionDTO;
 import com.mercedes.workflowrh.entity.*;
 import com.mercedes.workflowrh.repository.DemandeRepository;
 import com.mercedes.workflowrh.service.DemandeService;
@@ -9,11 +10,13 @@ import com.mercedes.workflowrh.service.EmployeService;
 import com.mercedes.workflowrh.service.MailService;
 import com.mercedes.workflowrh.service.SoldeCongeService;
 import com.mercedes.workflowrh.service.impl.HolidayService;
+import jakarta.validation.ReportAsSingleViolation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -691,6 +694,24 @@ public class DemandeController {
             return  ResponseEntity.status(500).body(e.getMessage());
         }
     }
+
+
+
+
+
+    @GetMapping("get-demandes-today")
+    public  ResponseEntity<?> getDemandesToday() {
+        try {
+
+
+            return ResponseEntity.ok(demandeService.findValidatedDemandesToday());
+
+        }
+        catch (Exception e) {
+            return ResponseEntity.status(500).body(e.getMessage());
+        }
+    }
+
 
 
 }

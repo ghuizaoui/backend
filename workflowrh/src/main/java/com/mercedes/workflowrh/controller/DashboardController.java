@@ -224,4 +224,40 @@ public class DashboardController {
             return ResponseEntity.internalServerError().body(null);
         }
     }
+
+    @GetMapping("/category-type-distribution")
+    public ResponseEntity<List<CategoryTypeDistributionDTO>> getCategoryTypeDistribution(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+
+        try {
+            logger.info("Getting category-type distribution for period: {} to {}");
+
+            LocalDateTime start = (startDate != null)
+                    ? startDate.atStartOfDay()
+                    : LocalDateTime.now().withDayOfYear(1).withHour(0).withMinute(0).withSecond(0);
+
+            LocalDateTime end = (endDate != null)
+                    ? endDate.atTime(LocalTime.MAX)
+                    : LocalDateTime.now();
+
+            if (start.isAfter(end)) {
+                logger.info("Invalid date range: start {} is after end {}");
+                return ResponseEntity.badRequest().body(null);
+            }
+
+            List<CategoryTypeDistributionDTO> distribution;
+            if (startDate != null || endDate != null) {
+                distribution = demandeService.getCategoryTypeDistribution(start, end);
+            } else {
+                distribution = demandeService.getCategoryTypeDistribution();
+            }
+
+            return ResponseEntity.ok(distribution);
+
+        } catch (Exception e) {
+            logger.info("Error getting category-type distribution");
+            return ResponseEntity.internalServerError().body(null);
+        }
+    }
 }

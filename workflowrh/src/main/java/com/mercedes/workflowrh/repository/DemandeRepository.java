@@ -226,4 +226,29 @@ public interface DemandeRepository extends JpaRepository<Demande, Long> {
 
 
 
+    // Dans DemandeRepository.java
+    @Query("SELECT d.categorie, d.typeDemande, COUNT(d) FROM Demande d " +
+            "WHERE d.dateCreation BETWEEN :start AND :end " +
+            "GROUP BY d.categorie, d.typeDemande " +
+            "ORDER BY d.categorie, COUNT(d) DESC")
+    List<Object[]> countDemandesByCategorieAndTypeWithDateRange(
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end);
+
+    @Query("SELECT d.categorie, d.typeDemande, COUNT(d) FROM Demande d " +
+            "GROUP BY d.categorie, d.typeDemande " +
+            "ORDER BY d.categorie, COUNT(d) DESC")
+    List<Object[]> countDemandesByCategorieAndType();
+
+
+
+    @Query("""
+    SELECT d 
+    FROM Demande d 
+    WHERE d.statut = com.mercedes.workflowrh.entity.StatutDemande.VALIDEE
+    AND FUNCTION('DATE', d.dateCreation) = CURRENT_DATE
+""")
+    List<Demande> findValidatedDemandesToday();
+
+
 }

@@ -1106,4 +1106,86 @@ public class DemandeServiceImpl implements DemandeService {
     public   List<Demande> getChefsDemandes() {
         return  demandeRepository.getDemandeByEmployeDrhSuper();
     }
+
+
+
+    @Override
+    public List<CategoryTypeDistributionDTO> getCategoryTypeDistribution(LocalDateTime start, LocalDateTime end) {
+        List<Object[]> results = demandeRepository.countDemandesByCategorieAndTypeWithDateRange(start, end);
+        return convertToCategoryTypeDistributionDTO(results, start, end);
+    }
+
+    @Override
+    public List<CategoryTypeDistributionDTO> getCategoryTypeDistribution() {
+        List<Object[]> results = demandeRepository.countDemandesByCategorieAndType();
+        return convertToCategoryTypeDistributionDTO(results, null, null);
+    }
+
+    @Override
+    @Transactional
+    public List<Demande> findValidatedDemandesToday() {
+        return  demandeRepository.findValidatedDemandesToday();
+    }
+
+    private List<CategoryTypeDistributionDTO> convertToCategoryTypeDistributionDTO(
+            List<Object[]> results, LocalDateTime start, LocalDateTime end) {
+
+        // Calculate total for percentage
+        long totalCount;
+        if (start != null && end != null) {
+            totalCount = demandeRepository.countByDateCreationBetween(start, end);
+        } else {
+            totalCount = demandeRepository.count();
+        }
+
+        List<CategoryTypeDistributionDTO> distribution = new ArrayList<>();
+
+        for (Object[] result : results) {
+            CategorieDemande categorie = (CategorieDemande) result[0];
+            TypeDemande typeDemande = (TypeDemande) result[1];
+            Long count = (Long) result[2];
+
+            double percentage = totalCount > 0 ? (double) count / totalCount * 100 : 0;
+
+            distribution.add(CategoryTypeDistributionDTO.builder()
+                    .categorie(categorie.name())
+                    .typeDemande(typeDemande != null ? typeDemande.name() : "ORDRE_MISSION")
+                    .count(count)
+                    .percentage(Math.round(percentage * 100.0) / 100.0)
+                    .build());
+        }
+
+        // Ensure all categories are represented, even if count is 0
+        ensureAllCategoriesRepresented(distribution, totalCount);
+
+        return distribution;
+    }
+
+    private void ensureAllCategoriesRepresented(List<CategoryTypeDistributionDTO> distribution, Long totalCount) {
+        Set<CategorieDemande> allCategories = new HashSet<>(Arrays.asList(CategorieDemande.values()));
+
+        // Get categories already in distribution
+        Set<CategorieDemande> existingCategories = distribution.stream()
+                .map(dto -> {
+                    try {
+                        return CategorieDemande.valueOf(dto.getCategorie());
+                    } catch (IllegalArgumentException e) {
+                        return null;
+                    }
+                })
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        // Add missing categories
+        for (CategorieDemande missingCategory : allCategories) {
+            if (!existingCategories.contains(missingCategory)) {
+                distribution.add(CategoryTypeDistributionDTO.builder()
+                        .categorie(missingCategory.name())
+                        .typeDemande("AUCUN")
+                        .count(0L)
+                        .percentage(0.0)
+                        .build());
+            }
+        }
+    }
 }

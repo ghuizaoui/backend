@@ -121,4 +121,15 @@ public interface DemandeService {
          String service);
 
   List<Demande> getChefsDemandes();
+
+
+ // Dans DemandeService.java
+ List<CategoryTypeDistributionDTO> getCategoryTypeDistribution(
+         LocalDateTime start, LocalDateTime end);
+
+ List<CategoryTypeDistributionDTO> getCategoryTypeDistribution();
+
+
+
+ List<Demande> findValidatedDemandesToday();
 }
