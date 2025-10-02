@@ -132,4 +132,10 @@ public interface DemandeService {
 
 
  List<Demande> findValidatedDemandesToday();
+
+ Demande libererDemande(Long demandeId, String matriculeConcierge);
+
+ List<Demande> getDemandesPourLiberation();
+
+ List<Demande> getDemandesLiberees();
 }

@@ -251,4 +251,17 @@ public interface DemandeRepository extends JpaRepository<Demande, Long> {
     List<Demande> findValidatedDemandesToday();
 
 
+    List<Demande> findByStatutAndEstLiberer(StatutDemande statut, Boolean estLiberer);
+
+    List<Demande> findByEstLiberer(Boolean estLiberer);
+
+    // Find demands ready for liberation (validated and not liberated)
+    @Query("SELECT d FROM Demande d WHERE d.statut = 'VALIDEE' AND d.estLiberer = false")
+    List<Demande> findDemandesPourLiberation();
+
+    // Find today's validated demands for liberation
+    @Query("SELECT d FROM Demande d WHERE d.statut = 'VALIDEE' AND d.estLiberer = false AND FUNCTION('DATE', d.autoDate) = CURRENT_DATE")
+    List<Demande> findTodayAutorisationsPourLiberation();
+
+
 }

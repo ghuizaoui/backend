@@ -41,4 +41,6 @@
                where n.destinataire.matricule = :matricule
                """)
         int deleteByDestinataireMatricule(@Param("matricule") String matricule);
+
+        long countByDestinataireMatricule(String  matricule);
     }

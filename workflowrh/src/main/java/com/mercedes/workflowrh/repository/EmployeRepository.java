@@ -30,4 +30,15 @@ public interface EmployeRepository extends JpaRepository<Employe, String> {
 
     List<Employe> findByServiceAndRole(String service, Role role);
     boolean existsByMatricule(String matricule);
+
+
+
+
+    // Add this method to find super DRH
+    @Query("SELECT e FROM Employe e WHERE e.drhSuper = true")
+    List<Employe> findByDrhSuperTrue();
+
+    // Add this method to find DRH by service
+    @Query("SELECT e FROM Employe e WHERE e.role = 'DRH' AND e.service = :service")
+    List<Employe> findDrhByService(@Param("service") String service);
 }

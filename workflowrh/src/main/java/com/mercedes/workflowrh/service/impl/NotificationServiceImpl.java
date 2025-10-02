@@ -41,37 +41,57 @@ public class NotificationServiceImpl implements NotificationService {
     private static final DateTimeFormatter D_FULL = DateTimeFormatter.ofPattern("dd/MM/yyyy 'à' HH:mm", FR);
     private static final DateTimeFormatter T_HM   = DateTimeFormatter.ofPattern("HH:mm", FR);
 
-    @Override @Transactional
-    public void notifyManagerOfNewDemand(Demande d,String service) {
+    @Override
+    @Transactional
+    public void notifyManagerOfNewDemand(Demande d, String service) {
         Employe creator = d.getEmploye();
         if (creator == null) return;
 
         Set<String> destinataires = new LinkedHashSet<>();
 
+        // Determine who should be notified based on the creator's role
         if (creator.getRole() == Role.EMPLOYE) {
+            // Employee -> notify their chefs
             addIfNotBlank(destinataires, creator.getChefHierarchique1Matricule());
             addIfNotBlank(destinataires, creator.getChefHierarchique2Matricule());
 
+            // Fallback: if no specific chefs, notify all chefs
             if (destinataires.isEmpty()) {
                 employeRepository.findByRole(Role.CHEF)
                         .forEach(c -> addIfNotBlank(destinataires, c.getMatricule()));
             }
         } else if (creator.getRole() == Role.CHEF) {
-            employeRepository.findByServiceAndRole(service,Role.DRH)
+            // Chef -> notify DRH
+            employeRepository.findByRole(Role.DRH)
                     .forEach(drh -> addIfNotBlank(destinataires, drh.getMatricule()));
+
+            // Also notify by service if needed
+            if (service != null && !service.isBlank()) {
+                employeRepository.findByServiceAndRole(service, Role.DRH)
+                        .forEach(drh -> addIfNotBlank(destinataires, drh.getMatricule()));
+            }
+        } else if (creator.getRole() == Role.DRH) {
+            // DRH creating demand -> notify super DRH if exists, or other DRH
+            employeRepository.findByRole(Role.DRH)
+                    .stream()
+                    .filter(drh -> !drh.getMatricule().equals(creator.getMatricule())) // Don't notify self
+                    .forEach(drh -> addIfNotBlank(destinataires, drh.getMatricule()));
+
+            // Notify super DRH specifically
+            employeRepository.findByDrhSuperTrue()
+                    .forEach(superDrh -> addIfNotBlank(destinataires, superDrh.getMatricule()));
         }
 
         if (destinataires.isEmpty()) return;
 
         String subject = "Nouvelle demande";
 
-        // 🔴 ICI : message personnalisé par destinataire
+        // Send notification to each recipient with personalized message
         destinataires.forEach(matriculeDest -> {
             String message = buildMessageCreationForRecipient(d, matriculeDest);
             sendToMatricule(d, matriculeDest, subject, message);
         });
     }
-
     // --- helpers existants (addIfNotBlank, afterCommit, etc.) ---
 
     /** Retourne le message "création" adapté au destinataire. */
@@ -445,4 +465,41 @@ public class NotificationServiceImpl implements NotificationService {
     }
 
     private String safe(String s){ return s==null? "": s; }
+
+
+
+
+    @Override
+    @Transactional
+    public void notifyEmployeeOnLiberation(Demande d) {
+        Employe employee = d.getEmploye();
+        if (employee == null) return;
+
+        String subject = "Demande libérée";
+        String message = buildMessageLiberation(d);
+
+        sendToMatricule(d, employee.getMatricule(), subject, message);
+    }
+
+    private String buildMessageLiberation(Demande d) {
+        if (d.getCategorie() == CategorieDemande.AUTORISATION && d.getAutoDate() != null) {
+            String h1 = d.getAutoHeureDebut() != null ? T_HM.format(d.getAutoHeureDebut()) : null;
+            String h2 = d.getAutoHeureFin() != null ? T_HM.format(d.getAutoHeureFin()) : null;
+            return "Votre autorisation a été libérée pour le "
+                    + D_DAY.format(d.getAutoDate())
+                    + (h1 != null ? " de " + h1 + (h2 != null ? " à " + h2 : "") : "")
+                    + ". Vous pouvez maintenant partir.";
+        }
+        if ((d.getCategorie() == CategorieDemande.CONGE_STANDARD || d.getCategorie() == CategorieDemande.CONGE_EXCEPTIONNEL)
+                && d.getCongeDateDebut() != null) {
+            return "Votre demande " + libelleType(d.getTypeDemande())
+                    + " a été libérée pour le " + D_DAY.format(d.getCongeDateDebut()) + ". Bon congé!";
+        }
+        if (d.getCategorie() == CategorieDemande.ORDRE_MISSION && d.getMissionDateDebut() != null && d.getMissionDateFin() != null) {
+            return "Votre ordre de mission a été libéré du "
+                    + D_DAY.format(d.getMissionDateDebut()) + " au " + D_DAY.format(d.getMissionDateFin()) + ". Bon voyage!";
+        }
+        return "Votre demande a été libérée.";
+    }
+
 }

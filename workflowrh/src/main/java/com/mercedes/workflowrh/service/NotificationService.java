@@ -12,5 +12,6 @@
 
 
         void notifyInterimaire(String interimaireMatricule,Demande demandeConge);
+        public void notifyEmployeeOnLiberation(Demande d);
 
     }

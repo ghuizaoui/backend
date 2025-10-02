@@ -713,5 +713,35 @@ public class DemandeController {
     }
 
 
+    @PostMapping("/liberer")
+    public ResponseEntity<Demande> libererDemande(@Valid @RequestBody LiberationRequest liberationRequest) {
+        log.info("start liberer #######################<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" );
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Utilisateur non authentifié.");
+        }
+
+        String matriculeConcierge = auth.getName();
+        Employe concierge = employeService.getEmployeByMatricule(matriculeConcierge)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Utilisateur non trouvé"));
+
+        // Check if user is concierge
+//        if (concierge.getRole() != Role.CONCIERGE) {
+//            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Seul le concierge peut libérer les demandes");
+//        }
+
+        try {
+            Demande demandeLiberee = demandeService.libererDemande(liberationRequest.getDemandeId(), matriculeConcierge);
+            log.info("Demande {} libérée par le concierge {}", liberationRequest.getDemandeId(), matriculeConcierge);
+            return ResponseEntity.ok(demandeLiberee);
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Erreur lors de la libération de la demande {}: {}", liberationRequest.getDemandeId(), e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+        }
+    }
+
+
 
 }

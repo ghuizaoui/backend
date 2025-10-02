@@ -99,6 +99,11 @@ public class Demande {
     private Long version;
 
 
+    // NEW FIELD: Liberation status for concierge
+    @Column(name = "est_liberer", nullable = false)
+    @Builder.Default
+    private Boolean estLiberer = false;
+
 
     @Lob
     @Column(name = "file", columnDefinition = "LONGBLOB")
