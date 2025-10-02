@@ -17,4 +17,10 @@ public interface SoldeCongeService {
     SoldeConge creerSoldeConge(Employe employe);
     Optional<SoldeConge> getSoldeActuel(String matriculeEmploye);
     void crediterSoldeConge(Employe employe, double jours);
+
+
+    public SoldeConge recalculerCumulSolde(Employe employe);
+    public SoldeConge initialiserSoldeAvecCumul(Employe employe);
+    public SoldeConge forcerMiseAJourCumul(Employe employe);
+    public SoldeConge getOrCreateSoldeActuel(String matriculeEmploye);
 }

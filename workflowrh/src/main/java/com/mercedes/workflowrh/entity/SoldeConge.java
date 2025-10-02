@@ -26,4 +26,6 @@ public class SoldeConge {
     private Float retardsN;
     private Float autorisationsN;
     private Float soldeActuel;
+
+    private Float report; // Solde reporté de l'année précédente
 }

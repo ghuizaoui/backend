@@ -402,8 +402,8 @@ public class DemandeController {
         try {
             Employe emp = employeService.getEmployeByMatricule(matricule)
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Employé introuvable"));
-            SoldeConge soldeConge = soldeCongeService.getSoldeActuel(matricule)
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Solde introuvable"));
+            // Get or create current year balance
+            SoldeConge soldeConge = soldeCongeService.getOrCreateSoldeActuel(matricule);
             EmployeSoldeDto dto = new EmployeSoldeDto();
             dto.setNom(emp.getNom());
             dto.setPrenom(emp.getPrenom());
