@@ -18,7 +18,7 @@ public interface SoldeCongeRepository extends JpaRepository<SoldeConge, Long> {
 
 
     // Trouver le solde d’un employé (dernier solde)
-
+    List<SoldeConge>   findAllByEmployeOrderByAnneeAsc(Employe employe);
 
     // Trouver le solde d’un employé pour une année donnée
     Optional<SoldeConge> findByEmployeAndAnnee(Employe employe, Integer annee);

@@ -1,4 +1,3 @@
-// src/main/java/com/mercedes/workflowrh/dto/dashboardDto/EmployeDashboardDTO.java
 package com.mercedes.workflowrh.dto.dashboardDto;
 
 import lombok.AllArgsConstructor;

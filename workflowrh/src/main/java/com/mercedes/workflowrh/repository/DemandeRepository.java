@@ -264,4 +264,25 @@ public interface DemandeRepository extends JpaRepository<Demande, Long> {
     List<Demande> findTodayAutorisationsPourLiberation();
 
 
+    List<Demande> findTop5ByEmployeMatriculeOrderByDateCreationDesc(String matricule);
+
+    // Find all autorisations for a specific date (any status)
+    @Query("SELECT d FROM Demande d WHERE d.categorie = com.mercedes.workflowrh.entity.CategorieDemande.AUTORISATION " +
+            "AND d.autoDate = :date")
+    List<Demande> findAutorisationsForDate(@Param("date") LocalDate date);
+
+    // Find only VALIDATED autorisations for a specific date
+    @Query("SELECT d FROM Demande d WHERE d.categorie = com.mercedes.workflowrh.entity.CategorieDemande.AUTORISATION " +
+            "AND d.autoDate = :date AND d.statut = com.mercedes.workflowrh.entity.StatutDemande.VALIDEE")
+    List<Demande> findValidatedAutorisationsForDate(@Param("date") LocalDate date);
+
+    // Count demands by category for an employee
+    @Query("SELECT d.categorie, COUNT(d) FROM Demande d WHERE d.employe.matricule = :matricule GROUP BY d.categorie")
+    List<Object[]> countByCategoryForEmployee(@Param("matricule") String matricule);
+
+    // Count demands by status for an employee
+    @Query("SELECT d.statut, COUNT(d) FROM Demande d WHERE d.employe.matricule = :matricule GROUP BY d.statut")
+    List<Object[]> countByStatusForEmployee(@Param("matricule") String matricule);
 }
+
+

@@ -11,6 +11,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List; // AJOUTER L'IMPORT
+import java.util.Map;
 
 public interface DemandeService {
  Demande createCongeStandard(
@@ -18,6 +19,8 @@ public interface DemandeService {
          LocalDate dateDebut, LocalTime heureDebut,
          LocalDate dateFin,   LocalTime heureFin
  );
+    public List<AutorisationAujourdhui> getValidatedAutorisationsForToday();
+    public Map<String, Long> getStatusStatistics(String matricule);
 
  Employe getEmployeByMatricule(String matricule);
 
@@ -93,8 +96,8 @@ public interface DemandeService {
 
  // -------------------- Search / Filter --------------------
  List<Demande> findByEmployeAndStatut(String matricule, StatutDemande statut);
-
- List<Demande> findByTypeDemande(TypeDemande typeDemande);
+    public Map<String, Long> getCategoryStatistics(String matricule);
+    List<Demande> findByTypeDemande(TypeDemande typeDemande);
 
  List<Demande> findByDateCreationBetween(LocalDateTime start, LocalDateTime end);
 

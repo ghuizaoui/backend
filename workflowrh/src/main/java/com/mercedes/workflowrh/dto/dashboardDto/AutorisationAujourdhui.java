@@ -18,4 +18,6 @@ public  class AutorisationAujourdhui {
     private String heureDebut;
     private String heureFin;
     private String service;
+    private String statut;  // VALIDEE, EN_COURS, REFUSEE
+    private Boolean estLiberer;  // For concierge liberation tracking
 }

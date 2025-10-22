@@ -959,84 +959,174 @@ public class DemandeServiceImpl implements DemandeService {
 // dashboard employe and concearge *********************/////////////////////////////////////////////////////////
 
     @Override
+    @Transactional(readOnly = true)
     public EmployeDashboardDTO getEmployeDashboard(String matricule, String role) {
-        Employe employe = getEmployeByMatricule(matricule);
+        Employe employe = employeRepository.findByMatricule(matricule)
+                .orElseThrow(() -> new RuntimeException("Employé non trouvé: " + matricule));
 
-        // Calculate date range for this month
-        LocalDateTime startOfMonth = LocalDateTime.now().withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0);
-        LocalDateTime endOfMonth = LocalDateTime.now().withDayOfMonth(LocalDateTime.now().getMonth().length(LocalDate.now().isLeapYear()))
-                .withHour(23).withMinute(59).withSecond(59);
+        KPIData kpiData = calculateKPIData(employe, role);
+        List<DemandeRecente> demandesRecentes = getDemandesRecentes(employe);
+        Map<String, Long> statutDistribution = getStatutDistribution(employe);
+        Map<String, Long> categorieDistribution = getCategorieDistribution(employe);
 
-        // Get KPIs
-        long totalDemandes = countByEmployeAndDateRange(matricule, startOfMonth, endOfMonth);
-        long demandesEnCours = findByEmployeAndStatut(matricule, StatutDemande.EN_COURS).size();
-        long demandesValidees = findByEmployeAndStatut(matricule, StatutDemande.VALIDEE).size();
-        long demandesRefusees = findByEmployeAndStatut(matricule, StatutDemande.REFUSEE).size();
+        List<AutorisationAujourdhui> autorisationsAujourdhui = null;
+        if (Role.CONCIERGE.equals(employe.getRole())) {
+            autorisationsAujourdhui = getValidatedAutorisationsForToday();
+        }
 
-        KPIData kpiData = KPIData.builder()
-                .totalDemandes(totalDemandes)
-                .demandesEnCours(demandesEnCours)
-                .demandesValidees(demandesValidees)
-                .demandesRefusees(demandesRefusees)
-                .build();
-
-        // Get recent demands (last 5)
-        List<Demande> recentDemandes = demandeRepository.findTop3ByEmployeMatriculeOrderByDateCreationDesc(matricule)
-                .stream()
-                .sorted(Comparator.comparing(Demande::getDateCreation).reversed())
-                .limit(5)
-                .collect(Collectors.toList());
-
-        List<DemandeRecente> demandesRecentes = recentDemandes.stream()
-                .map(this::convertToDemandeRecente)
-                .collect(Collectors.toList());
-
-        // Get status distribution
-        Map<String, Long> statutDistribution = getStatusDistributionForEmployee(matricule, startOfMonth, endOfMonth);
-
-        // Get category distribution
-        Map<String, Long> categorieDistribution = getCategoryDistributionForEmployee(matricule, startOfMonth, endOfMonth);
-
-        // Build the dashboard DTO
-        EmployeDashboardDTO dashboard = EmployeDashboardDTO.builder()
+        return EmployeDashboardDTO.builder()
                 .kpiData(kpiData)
                 .demandesRecentes(demandesRecentes)
                 .statutDistribution(statutDistribution)
                 .categorieDistribution(categorieDistribution)
+                .autorisationsAujourdhui(autorisationsAujourdhui)
                 .build();
+    }
 
-        // Add today's authorizations only for concierge role
-        if ("CONCIERGE".equals(role)) {
-            List<AutorisationAujourdhui> autorisations = getAutorisationsForToday();
-            dashboard.setAutorisationsAujourdhui(autorisations);
-            dashboard.getKpiData().setAutorisationsAujourdhui((long) autorisations.size());
+    private KPIData calculateKPIData(Employe employe, String role) {
+        List<Demande> demandes = demandeRepository.findByEmployeMatricule(employe.getMatricule());
+
+        // Calculate basic KPI counts
+        long totalDemandes = demandes.size();
+        long demandesEnCours = demandes.stream()
+                .filter(d -> d.getStatut() == StatutDemande.EN_COURS)
+                .count();
+        long demandesValidees = demandes.stream()
+                .filter(d -> d.getStatut() == StatutDemande.VALIDEE)
+                .count();
+        long demandesRefusees = demandes.stream()
+                .filter(d -> d.getStatut() == StatutDemande.REFUSEE)
+                .count();
+
+        // Calculate category-specific counts
+        long congesStandard = demandes.stream()
+                .filter(d -> d.getCategorie() == CategorieDemande.CONGE_STANDARD)
+                .count();
+        long congesExceptionnel = demandes.stream()
+                .filter(d -> d.getCategorie() == CategorieDemande.CONGE_EXCEPTIONNEL)
+                .count();
+        long autorisations = demandes.stream()
+                .filter(d -> d.getCategorie() == CategorieDemande.AUTORISATION)
+                .count();
+        long ordresMission = demandes.stream()
+                .filter(d -> d.getCategorie() == CategorieDemande.ORDRE_MISSION)
+                .count();
+
+        // Calculate today's validated autorisations (only for concierge)
+        long autorisationsAujourdhui = 0L;
+        if (Role.CONCIERGE.equals(employe.getRole())) {
+            autorisationsAujourdhui = getValidatedAutorisationsForToday().size();
         }
 
-        return dashboard;
+        return KPIData.builder()
+                .totalDemandes(totalDemandes)
+                .demandesEnCours(demandesEnCours)
+                .demandesValidees(demandesValidees)
+                .demandesRefusees(demandesRefusees)
+                .congesStandard(congesStandard)
+                .congesExceptionnel(congesExceptionnel)
+                .autorisations(autorisations)
+                .ordresMission(ordresMission)
+                .autorisationsAujourdhui(autorisationsAujourdhui)
+                .build();
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<AutorisationAujourdhui> getAutorisationsForToday() {
         LocalDate today = LocalDate.now();
 
-        List<Demande> autorisationsAujourdhui = demandeRepository.findByCategorieAndAutoDate(
-                CategorieDemande.AUTORISATION, today);
+        List<Demande> autorisationsToday = demandeRepository.findAutorisationsForDate(today);
 
-        return autorisationsAujourdhui.stream()
-                .map(d -> {
-                    AutorisationAujourdhui auth = new AutorisationAujourdhui();
-                    auth.setDemandeId(d.getId());
-                    auth.setEmployeNom(d.getEmploye().getNom());
-                    auth.setEmployePrenom(d.getEmploye().getPrenom());
-                    auth.setEmployeMatricule(d.getEmploye().getMatricule());
-                    auth.setHeureDebut(d.getAutoHeureDebut() != null ? d.getAutoHeureDebut().toString() : "");
-                    auth.setHeureFin(d.getAutoHeureFin() != null ? d.getAutoHeureFin().toString() : "");
-                    auth.setService(d.getEmploye().getService());
-                    return auth;
-                })
+        return autorisationsToday.stream()
+                .map(this::mapToAutorisationAujourdhui)
                 .collect(Collectors.toList());
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<AutorisationAujourdhui> getValidatedAutorisationsForToday() {
+        LocalDate today = LocalDate.now();
+
+        List<Demande> validatedAutorisations = demandeRepository.findValidatedAutorisationsForDate(today);
+
+        return validatedAutorisations.stream()
+                .map(this::mapToAutorisationAujourdhui)
+                .collect(Collectors.toList());
+    }
+
+    private AutorisationAujourdhui mapToAutorisationAujourdhui(Demande demande) {
+        return AutorisationAujourdhui.builder()
+                .demandeId(demande.getId())
+                .employeMatricule(demande.getEmploye().getMatricule())
+                .employeNom(demande.getEmploye().getNom())
+                .employePrenom(demande.getEmploye().getPrenom())
+                .heureDebut(demande.getAutoHeureDebut() != null ? demande.getAutoHeureDebut().toString() : null)
+                .heureFin(demande.getAutoHeureFin() != null ? demande.getAutoHeureFin().toString() : null)
+                .service(demande.getEmploye().getService())
+                .statut(demande.getStatut().name())
+                .estLiberer(demande.getEstLiberer())
+                .build();
+    }
+
+    private List<DemandeRecente> getDemandesRecentes(Employe employe) {
+        List<Demande> recentDemandes = demandeRepository.findTop5ByEmployeMatriculeOrderByDateCreationDesc(employe.getMatricule());
+
+        return recentDemandes.stream()
+                .map(d -> DemandeRecente.builder()
+                        .id(d.getId())
+                        .categorie(d.getCategorie().name())
+                        .statut(d.getStatut().name())
+                        .dateCreation(d.getDateCreation().toString())
+                        .typeDemande(d.getTypeDemande() != null ? d.getTypeDemande().name() : null)
+                        .build())
+                .collect(Collectors.toList());
+    }
+
+    private Map<String, Long> getStatutDistribution(Employe employe) {
+        List<Demande> demandes = demandeRepository.findByEmployeMatricule(employe.getMatricule());
+
+        return demandes.stream()
+                .collect(Collectors.groupingBy(
+                        d -> d.getStatut().name(),
+                        Collectors.counting()
+                ));
+    }
+
+    private Map<String, Long> getCategorieDistribution(Employe employe) {
+        List<Demande> demandes = demandeRepository.findByEmployeMatricule(employe.getMatricule());
+
+        return demandes.stream()
+                .collect(Collectors.groupingBy(
+                        d -> d.getCategorie().name(),
+                        Collectors.counting()
+                ));
+    }
+
+    // Additional helper methods for dashboard statistics
+    @Override
+    @Transactional(readOnly = true)
+    public Map<String, Long> getCategoryStatistics(String matricule) {
+        List<Demande> demandes = demandeRepository.findByEmployeMatricule(matricule);
+
+        return demandes.stream()
+                .collect(Collectors.groupingBy(
+                        d -> d.getCategorie().name(),
+                        Collectors.counting()
+                ));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<String, Long> getStatusStatistics(String matricule) {
+        List<Demande> demandes = demandeRepository.findByEmployeMatricule(matricule);
+
+        return demandes.stream()
+                .collect(Collectors.groupingBy(
+                        d -> d.getStatut().name(),
+                        Collectors.counting()
+                ));
+    }
     @Override
     public List<Demande> getDemandesValideesEtRefuseesDuService(
             String service){

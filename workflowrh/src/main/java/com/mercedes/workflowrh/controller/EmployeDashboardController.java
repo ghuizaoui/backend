@@ -50,21 +50,23 @@ public class EmployeDashboardController {
 
     @GetMapping("/autorisations-aujourdhui")
     public ResponseEntity<?> getAutorisationsAujourdhui(@RequestParam String role) {
-
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated()) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Utilisateur non authentifié.");
         }
         String matricule = auth.getName();
         try {
-             Employe employe = employeService.getEmployeByMatricule(matricule).get();
-            if (employe.getRole()== Role.CONCIERGE) {
+            Employe employe = employeService.getEmployeByMatricule(matricule).get();
+
+            // FIXED: Only concierge can access this endpoint
+            if (!Role.CONCIERGE.equals(employe.getRole())) {
                 return ResponseEntity.status(403).body("Access denied. Only concierge can view today's authorizations.");
             }
 
-            return ResponseEntity.ok(demandeService.getAutorisationsForToday());
+            // Use the correct method for concierge (validated autorisations only)
+            return ResponseEntity.ok(demandeService.getValidatedAutorisationsForToday());
 
-        }catch (Exception e) {
+        } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }

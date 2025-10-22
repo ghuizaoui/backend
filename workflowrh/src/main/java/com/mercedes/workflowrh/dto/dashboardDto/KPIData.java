@@ -6,13 +6,19 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Data
-@NoArgsConstructor
-@AllArgsConstructor
 @Builder
-public  class KPIData {
+public class KPIData {
     private Long totalDemandes;
     private Long demandesEnCours;
     private Long demandesValidees;
     private Long demandesRefusees;
-    private Long autorisationsAujourdhui; // Only for concierge
+
+    // NEW: Category-specific counts
+    private Long congesStandard;
+    private Long congesExceptionnel;
+    private Long autorisations;
+    private Long ordresMission;
+
+    // For concierge - validated autorisations for today only
+    private Long autorisationsAujourdhui;
 }
