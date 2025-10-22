@@ -57,11 +57,16 @@ public class DemandeServiceImpl implements DemandeService {
         Employe employe = currentEmployeOr404();
         validateDates(dateDebut, dateFin);
 
-        // Check solde if deducts (though for standard, always true)
+        // Calculate working days but DON'T deduct solde yet (wait for validation)
         long joursOuvres = holidayService.calculateWorkingDays(dateDebut, dateFin);
-        float soldeActuel = soldeCongeService.getSoldeActuel(employe.getMatricule()).orElseThrow().getSoldeActuel();
+
+        // Only check solde, don't deduct yet
+        float soldeActuel = soldeCongeService.getSoldeActuel(employe.getMatricule())
+                .orElseThrow(() -> new RuntimeException("Solde non trouvé pour l'employé: " + employe.getMatricule()))
+                .getSoldeActuel();
+
         if (soldeActuel < joursOuvres) {
-            throw bad("Solde insuffisant pour ce congé.");
+            throw bad("Solde insuffisant pour ce congé. Solde actuel: " + soldeActuel + ", jours requis: " + joursOuvres);
         }
 
         Demande d = Demande.builder()
@@ -77,8 +82,14 @@ public class DemandeServiceImpl implements DemandeService {
                 .dateCreation(LocalDateTime.now())
                 .build();
 
-        Demande saved = demandeRepository.save(d); // Save only the Demande
-        notificationService.notifyManagerOfNewDemand(saved,employe.getService()); // Notify manager
+        Demande saved = demandeRepository.save(d);
+        historiserCreation(saved);
+        notificationService.notifyManagerOfNewDemand(saved, employe.getService());
+
+        // DON'T deduct solde here - wait for validation
+        log.info("Congé standard créé avec ID: {} - Jours ouvrés: {} - Solde vérifié: {}",
+                saved.getId(), joursOuvres, soldeActuel);
+
         return saved;
     }
     @Override
@@ -205,22 +216,25 @@ public class DemandeServiceImpl implements DemandeService {
 
     @Override
     @Transactional
-    public Demande  createCongeExceptionnel(
+    public Demande createCongeExceptionnel(
             TypeDemande typeDemande,
             LocalDate dateDebut, LocalTime heureDebut,
-            LocalDate dateFin, LocalTime heureFin,String interimaireMatricule,
-            MultipartFile file) { // Added file parameter
+            LocalDate dateFin, LocalTime heureFin, String interimaireMatricule,
+            MultipartFile file) {
 
         assertType(typeDemande, CategorieDemande.CONGE_EXCEPTIONNEL);
         Employe employe = currentEmployeOr404();
         validateDates(dateDebut, dateFin);
 
-        // Check solde if deducts
+        // Check solde if deducts but DON'T deduct yet
         if (typeDemande.deductsFromSolde()) {
             long joursOuvres = holidayService.calculateWorkingDays(dateDebut, dateFin);
-            float soldeActuel = soldeCongeService.getSoldeActuel(employe.getMatricule()).orElseThrow().getSoldeActuel();
+            float soldeActuel = soldeCongeService.getSoldeActuel(employe.getMatricule())
+                    .orElseThrow(() -> new RuntimeException("Solde non trouvé pour l'employé: " + employe.getMatricule()))
+                    .getSoldeActuel();
+
             if (soldeActuel < joursOuvres) {
-                throw bad("Solde insuffisant pour ce congé.");
+                throw bad("Solde insuffisant pour ce congé. Solde actuel: " + soldeActuel + ", jours requis: " + joursOuvres);
             }
         }
 
@@ -236,25 +250,29 @@ public class DemandeServiceImpl implements DemandeService {
                 .congeHeureDebut(heureDebut)
                 .congeDateFin(dateFin)
                 .congeHeureFin(heureFin)
-                .file(fileData) // Store the file data
+                .file(fileData)
                 .workflowId(UUID.randomUUID().toString())
                 .dateCreation(LocalDateTime.now())
                 .build();
 
-        Demande saved = demandeRepository.save(d); // Save only the Demande
-        notificationService.notifyManagerOfNewDemand(saved,employe.getService()); // Notify manager
-        notificationService.notifyInterimaire(interimaireMatricule,d);
+        Demande saved = demandeRepository.save(d);
+        historiserCreation(saved);
+        notificationService.notifyManagerOfNewDemand(saved, employe.getService());
+
+        if (interimaireMatricule != null && !interimaireMatricule.isBlank()) {
+            notificationService.notifyInterimaire(interimaireMatricule, saved);
+        }
+
+        // DON'T deduct solde here - wait for validation
         return saved;
     }
     @Override
     @Transactional
     public Demande createAutorisation(
             TypeDemande typeDemande,
-            // PRÉVU
             LocalDate dateAutorisation,
             LocalTime heureDebut,
             LocalTime heureFin,
-            // RÉEL (optionnel)
             LocalDate dateReelle,
             LocalTime heureSortieReelle,
             LocalTime heureRetourReel) {
@@ -262,7 +280,7 @@ public class DemandeServiceImpl implements DemandeService {
         assertType(typeDemande, CategorieDemande.AUTORISATION);
         Employe employe = currentEmployeOr404();
 
-        // --- validations PRÉVU ---
+        // Validations PRÉVU
         if (dateAutorisation == null || heureDebut == null || heureFin == null) {
             throw bad("Jour et heures prévues obligatoires.");
         }
@@ -270,18 +288,38 @@ public class DemandeServiceImpl implements DemandeService {
             throw bad("Plage prévue invalide (début > fin).");
         }
 
-        // --- validations RÉEL (si fourni) ---
+        // Calculate potential solde deduction but DON'T deduct yet
+        LocalTime debut = heureSortieReelle != null ? heureSortieReelle : heureDebut;
+        LocalTime fin = heureRetourReel != null ? heureRetourReel : heureFin;
+
+        if (debut != null && fin != null) {
+            long minutes = ChronoUnit.MINUTES.between(debut, fin);
+            if (minutes > 120) {
+                throw bad("La durée de l'autorisation ne doit pas dépasser 2 heures (120 minutes).");
+            }
+
+            // Check solde but DON'T deduct yet
+            if (!holidayService.isFreeDay(dateAutorisation)) {
+                double joursPris = (minutes / 240.0) * 0.5;
+                float soldeActuel = soldeCongeService.getSoldeActuel(employe.getMatricule())
+                        .orElseThrow(() -> new RuntimeException("Solde non trouvé pour l'employé: " + employe.getMatricule()))
+                        .getSoldeActuel();
+
+                if (soldeActuel < joursPris) {
+                    throw bad("Solde insuffisant pour cette autorisation: requis " + joursPris + ", disponible " + soldeActuel);
+                }
+            }
+        }
+
+        // Validations RÉEL (si fourni)
         boolean anyRealProvided = (dateReelle != null) || (heureSortieReelle != null) || (heureRetourReel != null);
         if (anyRealProvided) {
-            // si un champ réel est donné, les 3 doivent l'être
             if (dateReelle == null || heureSortieReelle == null || heureRetourReel == null) {
                 throw bad("Si vous renseignez le réel, fournissez date réelle, heure de sortie réelle et heure de retour réelle.");
             }
-            // par règle métier : réel sur le même jour (ou lever l'exception si différent)
             if (!dateAutorisation.equals(dateReelle)) {
                 throw bad("L'autorisation est journalière : la date réelle doit être égale au jour prévu.");
             }
-            // Log the input values for debugging
             if (heureSortieReelle.isAfter(heureRetourReel)) {
                 throw bad("Plage réelle invalide (sortie > retour).");
             }
@@ -290,23 +328,23 @@ public class DemandeServiceImpl implements DemandeService {
         Demande d = Demande.builder()
                 .employe(employe)
                 .statut(StatutDemande.EN_COURS)
-                .categorie(typeDemande.getCategorie()) // AUTORISATION
+                .categorie(typeDemande.getCategorie())
                 .typeDemande(typeDemande)
-                // PRÉVU
                 .autoDate(dateAutorisation)
                 .autoHeureDebut(heureDebut)
                 .autoHeureFin(heureFin)
-                // RÉEL (optionnel)
-                .autoDateReelle(dateReelle)                   // peut être null
-                .autoHeureSortieReelle(heureSortieReelle)     // peut être null
-                .autoHeureRetourReel(heureRetourReel)         // peut être null
+                .autoDateReelle(dateReelle)
+                .autoHeureSortieReelle(heureSortieReelle)
+                .autoHeureRetourReel(heureRetourReel)
                 .workflowId(UUID.randomUUID().toString())
                 .dateCreation(LocalDateTime.now())
                 .build();
 
-        Demande saved = demandeRepository.save(d); // Save only the Demande
-        notificationService.notifyManagerOfNewDemand(saved,employe.getService()); // Notify manager
+        Demande saved = demandeRepository.save(d);
+        historiserCreation(saved);
+        notificationService.notifyManagerOfNewDemand(saved, employe.getService());
 
+        // DON'T deduct solde here - wait for validation
         return saved;
     }
     @Override
@@ -502,6 +540,11 @@ public class DemandeServiceImpl implements DemandeService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Non autorisé.");
         }
 
+        // Check if already validated
+        if (d.getStatut() == StatutDemande.VALIDEE) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Demande déjà validée.");
+        }
+
         d.setStatut(StatutDemande.VALIDEE);
         d.setValidateur(validateur);
         d.setCommentaireRefus(null);
@@ -512,6 +555,11 @@ public class DemandeServiceImpl implements DemandeService {
 
         Demande saved = demandeRepository.save(d);
 
+        // Calculate and deduct solde if applicable
+        if (shouldDeductSolde(d)) {
+            deductSoldeForDemande(d);
+        }
+
         // Notify the employee
         notificationService.notifyEmployeeOnValidation(saved);
 
@@ -520,12 +568,53 @@ public class DemandeServiceImpl implements DemandeService {
             notifyDrhForOversight(saved);
         }
 
-        // Rest of your existing logic for solde deduction...
-        // [Keep your existing solde deduction logic here]
-
         return saved;
     }
 
+
+    private boolean shouldDeductSolde(Demande demande) {
+        if (demande.getTypeDemande() == null) return false;
+
+        return demande.getTypeDemande().deductsFromSolde() &&
+                demande.getStatut() == StatutDemande.VALIDEE;
+    }
+
+
+    private void deductSoldeForDemande(Demande demande) {
+        try {
+            Employe employe = demande.getEmploye();
+            double joursADeduire = 0.0;
+
+            switch (demande.getCategorie()) {
+                case CONGE_STANDARD, CONGE_EXCEPTIONNEL -> {
+                    if (demande.getCongeDateDebut() != null && demande.getCongeDateFin() != null) {
+                        joursADeduire = holidayService.calculateWorkingDays(
+                                demande.getCongeDateDebut(),
+                                demande.getCongeDateFin()
+                        );
+                    }
+                }
+                case AUTORISATION -> {
+                    if (demande.getAutoHeureDebut() != null && demande.getAutoHeureFin() != null) {
+                        long minutes = ChronoUnit.MINUTES.between(
+                                demande.getAutoHeureDebut(),
+                                demande.getAutoHeureFin()
+                        );
+                        // Convert minutes to days (4 hours = 0.5 day)
+                        joursADeduire = (minutes / 240.0) * 0.5;
+                    }
+                }
+            }
+
+            if (joursADeduire > 0) {
+                soldeCongeService.debiterSoldeConge(employe, joursADeduire, demande.getCategorie());
+                log.info("Solde débité pour employé {}: {} jours", employe.getMatricule(), joursADeduire);
+            }
+        } catch (Exception e) {
+            log.error("Erreur lors du débit du solde pour la demande {}: {}", demande.getId(), e.getMessage());
+            throw new RuntimeException("Erreur lors du débit du solde", e);
+        }
+    }
     // New method to notify DRH for oversight
     private void notifyDrhForOversight(Demande demande) {
         // Find all DRH users to notify them of chef's validation
