@@ -283,6 +283,28 @@ public interface DemandeRepository extends JpaRepository<Demande, Long> {
     // Count demands by status for an employee
     @Query("SELECT d.statut, COUNT(d) FROM Demande d WHERE d.employe.matricule = :matricule GROUP BY d.statut")
     List<Object[]> countByStatusForEmployee(@Param("matricule") String matricule);
+
+
+    @Query("SELECT d FROM Demande d WHERE d.employe.matricule IN :matricules " +
+            "AND d.statut = :statut " +
+            "AND d.categorie IN :categories " +
+            "AND ((d.congeDateDebut BETWEEN :dateDebut AND :dateFin) OR " +
+            "(d.congeDateFin BETWEEN :dateDebut AND :dateFin) OR " +
+            "(d.congeDateDebut <= :dateDebut AND d.congeDateFin >= :dateFin))")
+    List<Demande> findCongesValidesByPeriode(
+            @Param("matricules") List<String> matricules,
+            @Param("statut") StatutDemande statut,
+            @Param("categories") List<CategorieDemande> categories,
+            @Param("dateDebut") LocalDateTime dateDebut,
+            @Param("dateFin") LocalDateTime dateFin);
+
+
+    // Add this method to DemandeRepository
+    List<Demande> findByEmployeMatriculeInAndStatutAndCategorieIn(
+            List<String> matricules,
+            StatutDemande statut,
+            List<CategorieDemande> categories
+    );
 }
 
 
